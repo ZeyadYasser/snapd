@@ -1066,6 +1066,26 @@ func (f *fakeSnappyBackend) LinkSnap(info *snap.Info, dev snap.Device, linkCtx b
 	return boot.RebootInfo{RebootRequired: reboot}, nil
 }
 
+func (f *fakeSnappyBackend) LinkSnapServices(info *snap.Info, dev snap.Device, linkCtx backend.LinkContext, tm timings.Measurer) (e error) {
+	// TODO: add aps and notify meter
+	return f.maybeErrForLastOp()
+}
+
+func (f *fakeSnappyBackend) LinkSnapBinaries(info *snap.Info, dev snap.Device, linkCtx backend.LinkContext, tm timings.Measurer) (e error) {
+	// TODO: add aps and notify meter
+	return f.maybeErrForLastOp()
+}
+
+func (f *fakeSnappyBackend) LinkSnapCurrentSymlinks(info *snap.Info, dev snap.Device, isUndo bool, tm timings.Measurer) (rebootRequired boot.RebootInfo, e error) {
+	// TODO: add aps and notify meter
+	return boot.RebootInfo{}, f.maybeErrForLastOp()
+}
+
+func (f *fakeSnappyBackend) GetRebootInfo(info *snap.Info, dev snap.Device, isUndo bool) (rebootRequired boot.RebootInfo, e error) {
+	// TODO: add aps and notify meter
+	return boot.RebootInfo{}, f.maybeErrForLastOp()
+}
+
 func svcSnapMountDir(svcs []*snap.AppInfo) string {
 	if len(svcs) == 0 {
 		return "<no services>"
@@ -1184,6 +1204,21 @@ func (f *fakeSnappyBackend) UnlinkSnap(info *snap.Info, linkCtx backend.LinkCont
 
 		unlinkFirstInstallUndo: linkCtx.FirstInstall,
 	})
+	return f.maybeErrForLastOp()
+}
+
+func (f *fakeSnappyBackend) UnlinkSnapServices(info *snap.Info, linkCtx backend.LinkContext, meter progress.Meter) error {
+	// TODO: add aps and notify meter
+	return f.maybeErrForLastOp()
+}
+
+func (f *fakeSnappyBackend) UnlinkSnapBinaries(info *snap.Info, linkCtx backend.LinkContext, meter progress.Meter) error {
+	// TODO: add aps and notify meter
+	return f.maybeErrForLastOp()
+}
+
+func (f *fakeSnappyBackend) UnlinkSnapCurrentSymlinks(info *snap.Info) error {
+	// TODO: add ap
 	return f.maybeErrForLastOp()
 }
 

@@ -472,6 +472,9 @@ func downloadImpl(ctx context.Context, name, sha3_384, downloadURL string, user 
 		}
 		var resp *http.Response
 		cli := s.newHTTPClient(nil)
+		cli.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return nil
+		}
 		resp, finalErr = s.doRequest(downloadCtx, cli, reqOptions, user)
 		if cancelled(downloadCtx) {
 			return fmt.Errorf("the download has been cancelled: %s", downloadCtx.Err())

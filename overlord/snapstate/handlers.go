@@ -1356,7 +1356,9 @@ func (m *SnapManager) doUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) (err erro
 		return err
 	}
 
-	if experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type) && !snapsup.Flags.IgnoreRunning {
+	refreshAppAwarenessEnabled := experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type)
+	t.Set("old-refresh-app-awareness", refreshAppAwarenessEnabled)
+	if refreshAppAwarenessEnabled && !snapsup.Flags.IgnoreRunning {
 		// Invoke the hard refresh flow. Upon success the returned lock will be
 		// held to prevent snap-run from advancing until UnlinkSnap, executed
 		// below, completes.
@@ -1391,9 +1393,19 @@ func (m *SnapManager) doUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) (err erro
 			// can safely hard-code this condition here.
 			RunInhibitHint: runinhibit.HintInhibitedForRefresh,
 		}
-		err = m.backend.UnlinkSnap(oldInfo, linkCtx, NewTaskProgressAdapterLocked(t))
-		if err != nil {
-			return err
+		pb := NewTaskProgressAdapterLocked(t)
+		if refreshAppAwarenessEnabled {
+			// binaries and current symlinks will be unlinked just before linking new revision
+			// to keep them as long as possible to allow refresh app awareness UX to run
+			err = m.backend.UnlinkSnapServices(oldInfo, linkCtx, pb)
+			if err != nil {
+				return err
+			}
+		} else {
+			err = m.backend.UnlinkSnap(oldInfo, linkCtx, pb)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1526,7 +1538,21 @@ func (m *SnapManager) undoUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) error {
 		IsUndo:         true,
 		ServiceOptions: opts,
 	}
-	reboot, err := m.backend.LinkSnap(oldInfo, deviceCtx, linkCtx, perfTimings)
+	var oldRefreshAppAwarenessEnabled bool
+	err = t.Get("old-refresh-app-awareness", &oldRefreshAppAwarenessEnabled)
+	if err != nil {
+		return err
+	}
+	var reboot boot.RebootInfo
+	if oldRefreshAppAwarenessEnabled && oldInfo.Type() != snap.TypeSnapd {
+		err = m.backend.LinkSnapServices(oldInfo, deviceCtx, linkCtx, perfTimings)
+		if err != nil {
+			return err
+		}
+		reboot, err = m.backend.GetRebootInfo(oldInfo, deviceCtx, linkCtx.IsUndo)
+	} else {
+		reboot, err = m.backend.LinkSnap(oldInfo, deviceCtx, linkCtx, perfTimings)
+	}
 	if err != nil {
 		return err
 	}
@@ -1958,6 +1984,10 @@ func notifyLinkParticipants(t *state.Task, snapsup *SnapSetup) {
 }
 
 func (m *SnapManager) doLinkSnap(t *state.Task, _ *tomb.Tomb) (err error) {
+	fmt.Println("Press the Enter Key to continue")
+	fmt.Scanln()
+	// time.Sleep(30 * time.Second)
+
 	st := t.State()
 	st.Lock()
 	defer st.Unlock()
@@ -2107,6 +2137,38 @@ func (m *SnapManager) doLinkSnap(t *state.Task, _ *tomb.Tomb) (err error) {
 
 	if err := m.maybeRemoveAppArmorProfilesOnSnapdDowngrade(st, newInfo); err != nil {
 		return fmt.Errorf("cannot discard apparmor profiles: %v", err)
+	}
+
+	tr := config.NewTransaction(st)
+	experimentalRefreshAppAwareness, err := features.Flag(tr, features.RefreshAppAwareness)
+	if err != nil && !config.IsNoOption(err) {
+		return err
+	}
+
+	refreshAppAwarenessEnabled := experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type)
+	if refreshAppAwarenessEnabled && !firstInstall && oldInfo.Type() != snap.TypeSnapd {
+		var unlinkErr error
+		defer func() {
+			if !IsErrAndNotWait(unlinkErr) {
+				return
+			}
+			if err := m.backend.LinkSnapBinaries(oldInfo, deviceCtx, linkCtx, perfTimings); err != nil {
+				t.Errorf("cannot cleanup failed attempt at making snap %q unavailable to the system: %v", snapsup.InstanceName(), err)
+			}
+			if _, err := m.backend.LinkSnapCurrentSymlinks(oldInfo, deviceCtx, linkCtx.IsUndo, perfTimings); err != nil {
+				t.Errorf("cannot cleanup failed attempt at making snap %q unavailable to the system: %v", snapsup.InstanceName(), err)
+			}
+			notifyLinkParticipants(t, snapsup)
+		}()
+		// unlink binaries and current symlinks that were postponed in UnlinkCurrentSnap
+		unlinkErr = m.backend.UnlinkSnapBinaries(oldInfo, linkCtx, pb)
+		if unlinkErr != nil {
+			return unlinkErr
+		}
+		unlinkErr = m.backend.UnlinkSnapCurrentSymlinks(oldInfo)
+		if unlinkErr != nil {
+			return unlinkErr
+		}
 	}
 
 	rebootInfo, err := m.backend.LinkSnap(newInfo, deviceCtx, linkCtx, perfTimings)

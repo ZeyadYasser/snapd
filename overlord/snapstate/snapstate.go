@@ -521,6 +521,7 @@ func doInstall(st *state.State, snapst *SnapState, snapsup *SnapSetup, flags int
 	}
 
 	if snapst.IsInstalled() {
+		// TODO: THIS COMMENT IS OUTDATED stop-snap-services ALREADY DOES THE JOB
 		// unlink-current-snap (will stop services for copy-data)
 		stop := st.NewTask("stop-snap-services", fmt.Sprintf(i18n.G("Stop snap %q services"), snapsup.InstanceName()))
 		stop.Set("stop-reason", snap.StopReasonRefresh)
@@ -559,6 +560,7 @@ func doInstall(st *state.State, snapst *SnapState, snapsup *SnapSetup, flags int
 		prev = gadgetCmdline
 	}
 
+	// TODO: THIS COMMENT IS OUTDATED stop-snap-services ALREADY DOES THE JOB
 	// copy-data (needs stopped services by unlink)
 	if !snapsup.Flags.Revert {
 		copyData := st.NewTask("copy-snap-data", fmt.Sprintf(i18n.G("Copy snap %q data"), snapsup.InstanceName()))
