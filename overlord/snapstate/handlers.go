@@ -1356,7 +1356,8 @@ func (m *SnapManager) doUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) (err erro
 		return err
 	}
 
-	if experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type) && !snapsup.Flags.IgnoreRunning {
+	refreshAppAwarenessEnabled := experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type)
+	if refreshAppAwarenessEnabled && !snapsup.Flags.IgnoreRunning {
 		// Invoke the hard refresh flow. Upon success the returned lock will be
 		// held to prevent snap-run from advancing until UnlinkSnap, executed
 		// below, completes.
@@ -1389,7 +1390,8 @@ func (m *SnapManager) doUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) (err erro
 			FirstInstall: false,
 			// This task is only used for unlinking a snap during refreshes so we
 			// can safely hard-code this condition here.
-			RunInhibitHint: runinhibit.HintInhibitedForRefresh,
+			RunInhibitHint:             runinhibit.HintInhibitedForRefresh,
+			RefreshAppAwarenessEnabled: refreshAppAwarenessEnabled,
 		}
 		err = m.backend.UnlinkSnap(oldInfo, linkCtx, NewTaskProgressAdapterLocked(t))
 		if err != nil {
@@ -1958,6 +1960,8 @@ func notifyLinkParticipants(t *state.Task, snapsup *SnapSetup) {
 }
 
 func (m *SnapManager) doLinkSnap(t *state.Task, _ *tomb.Tomb) (err error) {
+	fmt.Println("Press the Enter Key to continue")
+	fmt.Scanln()
 	st := t.State()
 	st.Lock()
 	defer st.Unlock()
@@ -2107,6 +2111,16 @@ func (m *SnapManager) doLinkSnap(t *state.Task, _ *tomb.Tomb) (err error) {
 
 	if err := m.maybeRemoveAppArmorProfilesOnSnapdDowngrade(st, newInfo); err != nil {
 		return fmt.Errorf("cannot discard apparmor profiles: %v", err)
+	}
+
+	tr := config.NewTransaction(st)
+	experimentalRefreshAppAwareness, err := features.Flag(tr, features.RefreshAppAwareness)
+	if err != nil && !config.IsNoOption(err) {
+		return err
+	}
+
+	if experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type) {
+		linkCtx.OldSnapInfo = oldInfo
 	}
 
 	rebootInfo, err := m.backend.LinkSnap(newInfo, deviceCtx, linkCtx, perfTimings)
