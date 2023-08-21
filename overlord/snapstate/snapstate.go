@@ -444,6 +444,8 @@ func doInstall(st *state.State, snapst *SnapState, snapsup *SnapSetup, flags int
 
 				return nil, err
 			}
+
+			// TODO: set snap revision in inhibit lock file once
 		}
 
 		if experimentalGateAutoRefreshHook {

@@ -510,7 +510,7 @@ func (s *refreshSuite) TestRefreshPrintInhibitHint(c *C) {
 	c.Assert(err, IsNil)
 	err = lock.Lock()
 	c.Assert(err, IsNil)
-	c.Check(runinhibit.LockWithHint("snap1", runinhibit.HintInhibitedForRefresh), IsNil)
+	c.Check(runinhibit.Lock("snap1", snap.R(1), runinhibit.HintInhibitedForRefresh), IsNil)
 	lock.Unlock()
 
 	stdout, stderr, err := ctlcmd.Run(mockContext, []string{"refresh", "--show-lock"}, 0)

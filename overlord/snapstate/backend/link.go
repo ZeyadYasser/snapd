@@ -57,6 +57,15 @@ type LinkContext struct {
 	// RequireMountedSnapdSnap indicates that the apps and services
 	// generated when linking need to use tooling from the snapd snap mount.
 	RequireMountedSnapdSnap bool
+
+	// SkipBinaries indicates that we should skip removing snap binaries,
+	// icons and desktop files in UnlinkSnap
+	SkipBinaries bool
+
+	// OldSnapInfo is used only in LinkSnap, and can be used to delete
+	// remaining binaries, icons and desktop files that where skipped by
+	// UnlinkSnap due to refresh app awareness flow
+	OldSnapInfo *snap.Info
 }
 
 func updateCurrentSymlinks(info *snap.Info) (e error) {
@@ -123,7 +132,7 @@ func (b Backend) LinkSnap(info *snap.Info, dev snap.Device, linkCtx LinkContext,
 			return
 		}
 		timings.Run(tm, "remove-wrappers", fmt.Sprintf("remove wrappers of snap %s", info.InstanceName()), func(timings.Measurer) {
-			removeGeneratedWrappers(info, linkCtx.FirstInstall, progress.Null)
+			removeGeneratedWrappers(info, linkCtx, progress.Null)
 		})
 	}()
 
@@ -183,24 +192,24 @@ func (b Backend) StopServices(apps []*snap.AppInfo, reason snap.ServiceStopReaso
 	return wrappers.StopServices(apps, nil, reason, meter, tm)
 }
 
-func (b Backend) generateWrappers(s *snap.Info, linkCtx LinkContext) error {
+func (b Backend) generateWrappers(newInfo *snap.Info, linkCtx LinkContext) error {
 	var err error
 	var cleanupFuncs []func(*snap.Info) error
 	defer func() {
 		if err != nil {
 			for _, cleanup := range cleanupFuncs {
-				cleanup(s)
+				cleanup(newInfo)
 			}
 		}
 	}()
 
-	if s.Type() == snap.TypeSnapd {
+	if newInfo.Type() == snap.TypeSnapd {
 		// snapd services are handled separately
-		return GenerateSnapdWrappers(s, &GenerateSnapdWrappersOptions{b.preseed})
+		return GenerateSnapdWrappers(newInfo, &GenerateSnapdWrappersOptions{b.preseed})
 	}
 
 	// add the CLI apps from the snap.yaml
-	if err = wrappers.EnsureSnapBinaries(nil, s); err != nil {
+	if err = wrappers.EnsureSnapBinaries(linkCtx.OldSnapInfo, newInfo); err != nil {
 		return err
 	}
 	cleanupFuncs = append(cleanupFuncs, wrappers.RemoveSnapBinaries)
@@ -211,7 +220,7 @@ func (b Backend) generateWrappers(s *snap.Info, linkCtx LinkContext) error {
 		RequireMountedSnapdSnap: linkCtx.RequireMountedSnapdSnap,
 	}
 	if err = wrappers.EnsureSnapServices(map[*snap.Info]*wrappers.SnapServiceOptions{
-		s: linkCtx.ServiceOptions,
+		newInfo: linkCtx.ServiceOptions,
 	}, ensureOpts, nil, progress.Null); err != nil {
 		return err
 	}
@@ -220,19 +229,19 @@ func (b Backend) generateWrappers(s *snap.Info, linkCtx LinkContext) error {
 	})
 
 	// add D-Bus service activation files
-	if err = wrappers.AddSnapDBusActivationFiles(s); err != nil {
+	if err = wrappers.AddSnapDBusActivationFiles(newInfo); err != nil {
 		return err
 	}
 	cleanupFuncs = append(cleanupFuncs, wrappers.RemoveSnapDBusActivationFiles)
 
 	// add the desktop files
-	if err = wrappers.EnsureSnapDesktopFiles(s); err != nil {
+	if err = wrappers.EnsureSnapDesktopFiles(newInfo); err != nil {
 		return err
 	}
 	cleanupFuncs = append(cleanupFuncs, wrappers.RemoveSnapDesktopFiles)
 
 	// add the desktop icons
-	if err = wrappers.EnsureSnapIcons(s); err != nil {
+	if err = wrappers.EnsureSnapIcons(newInfo); err != nil {
 		return err
 	}
 	cleanupFuncs = append(cleanupFuncs, wrappers.RemoveSnapIcons)
@@ -240,34 +249,38 @@ func (b Backend) generateWrappers(s *snap.Info, linkCtx LinkContext) error {
 	return nil
 }
 
-func removeGeneratedWrappers(s *snap.Info, firstInstallUndo bool, meter progress.Meter) error {
+func removeGeneratedWrappers(s *snap.Info, linkCtx LinkContext, meter progress.Meter) error {
 	if s.Type() == snap.TypeSnapd {
-		return removeGeneratedSnapdWrappers(s, firstInstallUndo, progress.Null)
+		return removeGeneratedSnapdWrappers(s, linkCtx.FirstInstall, progress.Null)
 	}
 
-	err1 := wrappers.RemoveSnapBinaries(s)
-	if err1 != nil {
-		logger.Noticef("Cannot remove binaries for %q: %v", s.InstanceName(), err1)
+	var err1, err2, err3, err4, err5 error
+
+	if !linkCtx.SkipBinaries {
+		err1 = wrappers.RemoveSnapBinaries(s)
+		if err1 != nil {
+			logger.Noticef("Cannot remove binaries for %q: %v", s.InstanceName(), err1)
+		}
+
+		err2 = wrappers.RemoveSnapDesktopFiles(s)
+		if err2 != nil {
+			logger.Noticef("Cannot remove desktop files for %q: %v", s.InstanceName(), err2)
+		}
+
+		err3 = wrappers.RemoveSnapIcons(s)
+		if err3 != nil {
+			logger.Noticef("Cannot remove desktop icons for %q: %v", s.InstanceName(), err3)
+		}
 	}
 
-	err2 := wrappers.RemoveSnapDBusActivationFiles(s)
-	if err2 != nil {
-		logger.Noticef("Cannot remove D-Bus activation for %q: %v", s.InstanceName(), err2)
-	}
-
-	err3 := wrappers.RemoveSnapServices(s, meter)
-	if err3 != nil {
-		logger.Noticef("Cannot remove services for %q: %v", s.InstanceName(), err3)
-	}
-
-	err4 := wrappers.RemoveSnapDesktopFiles(s)
+	err4 = wrappers.RemoveSnapDBusActivationFiles(s)
 	if err4 != nil {
-		logger.Noticef("Cannot remove desktop files for %q: %v", s.InstanceName(), err4)
+		logger.Noticef("Cannot remove D-Bus activation for %q: %v", s.InstanceName(), err4)
 	}
 
-	err5 := wrappers.RemoveSnapIcons(s)
+	err5 = wrappers.RemoveSnapServices(s, meter)
 	if err5 != nil {
-		logger.Noticef("Cannot remove desktop icons for %q: %v", s.InstanceName(), err5)
+		logger.Noticef("Cannot remove services for %q: %v", s.InstanceName(), err5)
 	}
 
 	return firstErr(err1, err2, err3, err4, err5)
@@ -304,11 +317,11 @@ func (b Backend) UnlinkSnap(info *snap.Info, linkCtx LinkContext, meter progress
 	var err0 error
 	if hint := linkCtx.RunInhibitHint; hint != runinhibit.HintNotInhibited {
 		// inhibit startup of new programs
-		err0 = runinhibit.LockWithHint(info.InstanceName(), hint)
+		err0 = runinhibit.Lock(info.InstanceName(), info.SnapRevision(), hint)
 	}
 
 	// remove generated services, binaries etc
-	err1 := removeGeneratedWrappers(info, linkCtx.FirstInstall, meter)
+	err1 := removeGeneratedWrappers(info, linkCtx, meter)
 
 	// and finally remove current symlinks
 	err2 := removeCurrentSymlinks(info)

@@ -81,8 +81,7 @@ func inhibitMessage(snapName string, hint runinhibit.Hint) string {
 
 var isGraphicalSession = func() bool {
 	// TODO: uncomment once there is a proper UX review
-	//return os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != ""
-	return false
+	return os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != ""
 }
 
 var pendingRefreshNotification = func(refreshInfo *client.PendingSnapRefreshInfo) error {
@@ -110,7 +109,7 @@ var tryNotifyRefreshViaSnapDesktopIntegrationFlow = func(snapName string) (bool,
 	}
 	obj := conn.Object("io.snapcraft.SnapDesktopIntegration", "/io/snapcraft/SnapDesktopIntegration")
 	extraParams := make(map[string]dbus.Variant)
-	err = obj.Call("io.snapcraft.SnapDesktopIntegration.ApplicationIsBeingRefreshed", 0, snapName, runinhibit.HintFile(snapName), extraParams).Store()
+	err = obj.Call("io.snapcraft.SnapDesktopIntegration.ApplicationIsBeingRefreshed", 0, snapName, runinhibit.LockFile(snapName), extraParams).Store()
 	if err != nil {
 		logger.Noticef("unable to successfully call io.snapcraft.SnapDesktopIntegration.ApplicationIsBeingRefreshed: %v", err)
 		return false, nil

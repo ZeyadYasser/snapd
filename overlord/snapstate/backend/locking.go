@@ -64,7 +64,7 @@ func (b Backend) RunInhibitSnapForUnlink(info *snap.Info, hint runinhibit.Hint, 
 	// check instead? Doing so would somewhat change the semantic of soft
 	// and hard checks, as it would effectively make hard check a no-op,
 	// but it might provide a nicer user experience.
-	if err := runinhibit.LockWithHint(info.InstanceName(), hint); err != nil {
+	if err := runinhibit.Lock(info.InstanceName(), info.SnapRevision(), hint); err != nil {
 		return nil, err
 	}
 	return lock, nil

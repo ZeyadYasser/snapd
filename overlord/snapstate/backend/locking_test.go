@@ -29,6 +29,7 @@ import (
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/osutil"
 	"github.com/snapcore/snapd/overlord/snapstate/backend"
+	"github.com/snapcore/snapd/snap"
 	"github.com/snapcore/snapd/snap/snaptest"
 )
 
@@ -46,7 +47,7 @@ func (s *lockingSuite) TestRunInhibitSnapForUnlinkPositiveDescision(c *C) {
 	const yaml = `name: snap-name
 version: 1
 `
-	info := snaptest.MockInfo(c, yaml, nil)
+	info := snaptest.MockInfo(c, yaml, &snap.SideInfo{Revision: snap.R(11)})
 	lock, err := s.be.RunInhibitSnapForUnlink(info, "hint", func() error {
 		// This decision function returns nil so the lock is established and
 		// the inhibition hint is set.

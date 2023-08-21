@@ -40,6 +40,7 @@ import (
 	"github.com/jessevdk/go-flags"
 
 	"github.com/snapcore/snapd/client"
+	"github.com/snapcore/snapd/cmd/snaplock/runinhibit"
 	"github.com/snapcore/snapd/desktop/portal"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/features"
@@ -488,7 +489,11 @@ func (x *cmdRun) snapRunApp(snapApp string, args []string) error {
 		logger.Debugf("enabled debug logging of early snap startup")
 	}
 	snapName, appName := snap.SplitSnapApp(snapApp)
-	info, err := getSnapInfo(snapName, snap.R(0))
+	snapRev, err := runinhibit.GetRevision(snapName)
+	if err != nil {
+		return err
+	}
+	info, err := getSnapInfo(snapName, snapRev)
 	if err != nil {
 		return err
 	}

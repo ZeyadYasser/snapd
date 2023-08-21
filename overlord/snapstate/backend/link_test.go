@@ -799,7 +799,8 @@ func (s *snapdOnCoreUnlinkSuite) TestUnlinkNonFirstSnapdOnCoreDoesNothing(c *C) 
 
 	// unlinked snaps have a run inhibition lock. XXX: the specific inhibition hint can change.
 	c.Check(filepath.Join(runinhibit.InhibitDir, "snapd.lock"), testutil.FilePresent)
-	c.Check(filepath.Join(runinhibit.InhibitDir, "snapd.lock"), testutil.FileEquals, "refresh")
+	expectedLockInfo := `{"hint":"refresh","revision":"11"}`
+	c.Check(filepath.Join(runinhibit.InhibitDir, "snapd.lock"), testutil.FileEquals, expectedLockInfo)
 }
 
 func (s *linkSuite) TestLinkOptRequiresTooling(c *C) {
