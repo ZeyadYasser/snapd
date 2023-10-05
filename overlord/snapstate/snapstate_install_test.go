@@ -94,6 +94,7 @@ func expectedDoInstallTasks(typ snap.Type, opts, discards int, startTasks []stri
 		expected = append(expected,
 			"run-hook[pre-refresh]",
 			"stop-snap-services",
+			"inhibit-snap",
 			"remove-aliases",
 			"unlink-current-snap",
 		)
@@ -114,6 +115,7 @@ func expectedDoInstallTasks(typ snap.Type, opts, discards int, startTasks []stri
 	if opts&preferInstalled != 0 {
 		expected = append(expected, "prefer-aliases")
 	}
+	expected = append(expected, "uninhibit-snap")
 	if opts&updatesBootConfig != 0 {
 		expected = append(expected, "update-managed-boot-config")
 	}

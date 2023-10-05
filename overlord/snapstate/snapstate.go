@@ -531,6 +531,10 @@ func doInstall(st *state.State, snapst *SnapState, snapsup *SnapSetup, flags int
 		addTask(stop)
 		prev = stop
 
+		inhibitRun := st.NewTask("inhibit-snap", fmt.Sprintf(i18n.G("Inhibit snap %q from running"), snapsup.InstanceName()))
+		addTask(inhibitRun)
+		prev = inhibitRun
+
 		removeAliases := st.NewTask("remove-aliases", fmt.Sprintf(i18n.G("Remove aliases for snap %q"), snapsup.InstanceName()))
 		addTask(removeAliases)
 		prev = removeAliases
@@ -599,6 +603,10 @@ func doInstall(st *state.State, snapst *SnapState, snapsup *SnapSetup, flags int
 		addTask(prefer)
 		prev = prefer
 	}
+
+	uninhibitRun := st.NewTask("uninhibit-snap", fmt.Sprintf(i18n.G("Allow snap %q to run"), snapsup.InstanceName()))
+	addTask(uninhibitRun)
+	prev = uninhibitRun
 
 	if isCoreBoot && snapsup.Type == snap.TypeSnapd {
 		// make sure no other active changes are changing the kernel command line

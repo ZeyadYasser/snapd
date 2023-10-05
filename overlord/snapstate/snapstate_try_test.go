@@ -96,6 +96,7 @@ func (s *snapmgrTestSuite) testTrySetsTryMode(flags snapstate.Flags, c *C, extra
 		"auto-connect",
 		"set-auto-aliases",
 		"setup-aliases",
+		"uninhibit-snap",
 		"run-hook[install]",
 		"run-hook[default-configure]",
 		"start-snap-services",

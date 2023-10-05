@@ -524,6 +524,8 @@ func Manager(st *state.State, runner *state.TaskRunner) (*SnapManager, error) {
 	runner.AddHandler("toggle-snap-flags", m.doToggleSnapFlags, nil)
 	runner.AddHandler("check-rerefresh", m.doCheckReRefresh, nil)
 	runner.AddHandler("conditional-auto-refresh", m.doConditionalAutoRefresh, nil)
+	runner.AddHandler("inhibit-snap", m.doInhibitSnap, m.doUninhibitSnap)
+	runner.AddHandler("uninhibit-snap", m.doUninhibitSnap, m.doInhibitSnap)
 
 	// FIXME: drop the task entirely after a while
 	// (having this wart here avoids yet-another-patch)

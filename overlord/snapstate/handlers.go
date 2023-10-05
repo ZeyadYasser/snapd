@@ -20,6 +20,7 @@
 package snapstate
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1354,7 +1355,8 @@ func (m *SnapManager) doUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) (err erro
 		return err
 	}
 
-	if experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type) && !snapsup.Flags.IgnoreRunning {
+	refreshAppAwarenessEnabled := experimentalRefreshAppAwareness && !excludeFromRefreshAppAwareness(snapsup.Type)
+	if refreshAppAwarenessEnabled && !snapsup.Flags.IgnoreRunning {
 		// Invoke the hard refresh flow. Upon success the returned lock will be
 		// held to prevent snap-run from advancing until UnlinkSnap, executed
 		// below, completes.
@@ -1385,9 +1387,7 @@ func (m *SnapManager) doUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) (err erro
 		// do the final unlink
 		linkCtx := backend.LinkContext{
 			FirstInstall: false,
-			// This task is only used for unlinking a snap during refreshes so we
-			// can safely hard-code this condition here.
-			RunInhibitHint: runinhibit.HintInhibitedForRefresh,
+			SkipBinaries: refreshAppAwarenessEnabled,
 		}
 		err = m.backend.UnlinkSnap(oldInfo, linkCtx, NewTaskProgressAdapterLocked(t))
 		if err != nil {
@@ -1956,6 +1956,10 @@ func notifyLinkParticipants(t *state.Task, snapsup *SnapSetup) {
 }
 
 func (m *SnapManager) doLinkSnap(t *state.Task, _ *tomb.Tomb) (err error) {
+	fmt.Println("dummy wait for ENTER for debugging")
+	input := bufio.NewScanner(os.Stdin)
+	input.Scan()
+
 	st := t.State()
 	st.Lock()
 	defer st.Unlock()
@@ -4540,4 +4544,49 @@ var getDirMigrationOpts = func(st *state.State, snapst *SnapState, snapsup *Snap
 	}
 
 	return opts, nil
+}
+
+func (m *SnapManager) doInhibitSnap(t *state.Task, _ *tomb.Tomb) (err error) {
+	st := t.State()
+	st.Lock()
+	defer st.Unlock()
+
+	_, snapst, err := snapSetupAndState(t)
+	if err != nil {
+		return err
+	}
+
+	info, err := snapst.CurrentInfo()
+	if err != nil {
+		return err
+	}
+
+	if info.Type() == snap.TypeSnapd {
+		return nil
+	}
+
+	const hint = runinhibit.HintInhibitedForRefresh
+	inhibitInfo := runinhibit.InhibitInfo{Previous: info.SnapRevision()}
+	if err := runinhibit.LockWithHint(info.InstanceName(), hint, inhibitInfo); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *SnapManager) doUninhibitSnap(t *state.Task, _ *tomb.Tomb) (err error) {
+	st := t.State()
+	st.Lock()
+	defer st.Unlock()
+
+	snapsup, err := TaskSnapSetup(t)
+	if err != nil {
+		return err
+	}
+
+	if err := runinhibit.Unlock(snapsup.InstanceName()); err != nil {
+		return err
+	}
+
+	return nil
 }
