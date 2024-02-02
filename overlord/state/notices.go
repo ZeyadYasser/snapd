@@ -192,12 +192,6 @@ const (
 	WarningNotice NoticeType = "warning"
 )
 
-const (
-	// Data key used for holding change kind in a change-update notice.
-	// TODO: Should we add strict type validation for notices data keys?
-	ChangeUpdateNoticeKindDataKey string = "kind"
-)
-
 func (t NoticeType) Valid() bool {
 	switch t {
 	case ChangeUpdateNotice, WarningNotice:

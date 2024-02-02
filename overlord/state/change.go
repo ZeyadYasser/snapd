@@ -423,12 +423,11 @@ func (c *Change) Status() Status {
 	panic(fmt.Sprintf("internal error: cannot process change status: %v", statusStats))
 }
 
-// addNotice triggers a change-update notice.
+// addNotice records an occurrence of a change-update notice for this change.
+// The notice key is set to the change ID.
 func (c *Change) addNotice() error {
 	opts := &AddNoticeOptions{
-		Data: map[string]string{
-			ChangeUpdateNoticeKindDataKey: c.Kind(),
-		},
+		Data: map[string]string{"kind": c.Kind()},
 	}
 	_, err := c.state.AddNotice(nil, ChangeUpdateNotice, c.id, opts)
 	return err
@@ -445,7 +444,7 @@ func (c *Change) notifyStatusChange(new Status) {
 	// tasks' statuses so we might be sending a lot of change-update
 	// notices.
 	if err := c.addNotice(); err != nil {
-		logger.Debugf(`internal error: failed to add "change-update" notice: %v`, err)
+		logger.Panicf(`internal error: failed to add "change-update" notice: %v`, err)
 	}
 	c.lastObservedStatus = new
 }

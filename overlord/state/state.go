@@ -345,7 +345,7 @@ func (s *State) NewChange(kind, summary string) *Change {
 	s.changes[id] = chg
 	// Add change-update notice for newly spawned change
 	if err := chg.addNotice(); err != nil {
-		logger.Debugf(`internal error: failed to add "change-update" notice: %v`, err)
+		logger.Panicf(`internal error: failed to add "change-update" notice: %v`, err)
 	}
 	return chg
 }
