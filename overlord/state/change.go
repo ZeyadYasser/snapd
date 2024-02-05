@@ -139,16 +139,17 @@ const (
 // while the individual Task values would track the running of
 // the hooks themselves.
 type Change struct {
-	state              *State
-	id                 string
-	kind               string
-	summary            string
-	status             Status
-	clean              bool
-	data               customData
-	taskIDs            []string
-	ready              chan struct{}
-	lastObservedStatus Status
+	state                    *State
+	id                       string
+	kind                     string
+	summary                  string
+	status                   Status
+	clean                    bool
+	data                     customData
+	taskIDs                  []string
+	ready                    chan struct{}
+	lastObservedStatus       Status
+	lastRecordedNoticeStatus Status
 
 	spawnTime time.Time
 	readyTime time.Time
@@ -433,18 +434,22 @@ func (c *Change) addNotice() error {
 	return err
 }
 
+func shouldSkipNotice(old, new Status) bool {
+	return (old == new) || (old == DoingStatus && new == DoStatus) || (old == UndoingStatus && new == UndoStatus)
+}
+
 func (c *Change) notifyStatusChange(new Status) {
 	if c.lastObservedStatus == new {
 		return
 	}
 	c.state.notifyChangeStatusChangedHandlers(c, c.lastObservedStatus, new)
 	// Add change-update notice for status change
-	// Note: Change status alternates rapidly between “Do” and “Doing”
-	// statuses because it gets computed based on an aggregation of its
-	// tasks' statuses so we might be sending a lot of change-update
-	// notices.
-	if err := c.addNotice(); err != nil {
-		logger.Panicf(`internal error: failed to add "change-update" notice: %v`, err)
+	if !shouldSkipNotice(c.lastRecordedNoticeStatus, new) {
+		logger.Debugf("change: %q status changed from %q to %q", c.Kind(), c.lastRecordedNoticeStatus, new)
+		if err := c.addNotice(); err != nil {
+			logger.Panicf(`internal error: failed to add "change-update" notice: %v`, err)
+		}
+		c.lastRecordedNoticeStatus = new
 	}
 	c.lastObservedStatus = new
 }
