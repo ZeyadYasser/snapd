@@ -433,18 +433,28 @@ func (c *Change) addNotice() error {
 	return err
 }
 
+func shouldSkipNotice(old, new Status) bool {
+	// Doing -> Do or Do -> Doing
+	if (old == DoingStatus && new == DoStatus) || (old == DoStatus && new == DoingStatus) {
+		return true
+	}
+	// Undoing -> Undo or Undo -> Undoing
+	if (old == UndoingStatus && new == UndoStatus) || (old == UndoStatus && new == UndoingStatus) {
+		return true
+	}
+	return false
+}
+
 func (c *Change) notifyStatusChange(new Status) {
 	if c.lastObservedStatus == new {
 		return
 	}
 	c.state.notifyChangeStatusChangedHandlers(c, c.lastObservedStatus, new)
 	// Add change-update notice for status change
-	// Note: Change status alternates rapidly between “Do” and “Doing”
-	// statuses because it gets computed based on an aggregation of its
-	// tasks' statuses so we might be sending a lot of change-update
-	// notices.
-	if err := c.addNotice(); err != nil {
-		logger.Panicf(`internal error: failed to add "change-update" notice: %v`, err)
+	if !shouldSkipNotice(c.lastObservedStatus, new) {
+		if err := c.addNotice(); err != nil {
+			logger.Panicf(`internal error: failed to add "change-update" notice: %v`, err)
+		}
 	}
 	c.lastObservedStatus = new
 }
