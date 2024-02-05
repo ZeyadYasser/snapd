@@ -17,10 +17,13 @@ package state
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/snapcore/snapd/logger"
 )
 
 const (
@@ -82,6 +85,9 @@ type Notice struct {
 	// The repeatAfter duration must be less than this, because the notice
 	// won't be tracked after it expires.
 	expireAfter time.Duration
+
+	state        *State
+	internalData customData
 }
 
 func (n *Notice) String() string {
@@ -90,6 +96,21 @@ func (n *Notice) String() string {
 		userIDStr = strconv.FormatUint(uint64(*n.userID), 10)
 	}
 	return fmt.Sprintf("Notice %s (%s:%s:%s)", n.id, userIDStr, n.noticeType, n.key)
+}
+
+func (n *Notice) Get(key string, value interface{}) error {
+	n.state.reading()
+	return n.internalData.get(key, value)
+}
+
+func (n *Notice) Set(key string, value interface{}) {
+	n.state.writing()
+	n.internalData.set(key, value)
+}
+
+func (n *Notice) Has(key string) bool {
+	n.state.reading()
+	return n.internalData.has(key)
 }
 
 // UserID returns the value of the notice's user ID and whether it is set.
@@ -213,6 +234,51 @@ type AddNoticeOptions struct {
 	Time time.Time
 }
 
+type noticeHandlerFunc func(state *State, notice *Notice, options *AddNoticeOptions, new bool) error
+
+var noticeHandlerTable = map[NoticeType]noticeHandlerFunc{
+	ChangeUpdateNotice: changeUpdateNoticeHandler,
+}
+
+func changeUpdateNoticeHandler(state *State, notice *Notice, options *AddNoticeOptions, new bool) error {
+	chg := state.Change(notice.key)
+	if chg == nil {
+		return fmt.Errorf("internal error: cannot find change %s", notice.key)
+	}
+
+	currentStatus := chg.Status()
+	var oldStatus Status
+	err := notice.Get("old-status", &oldStatus)
+	if err != nil && !errors.Is(err, ErrNoState) {
+		return err
+	}
+	if new || errors.Is(err, ErrNoState) {
+		notice.Set("old-status", currentStatus)
+		return nil
+	}
+	if (oldStatus == currentStatus) || (oldStatus == DoingStatus && currentStatus == DoStatus) || (oldStatus == UndoingStatus && currentStatus == UndoStatus) {
+		now := options.Time
+		if now.IsZero() {
+			now = time.Now()
+		}
+		now = now.UTC()
+		// suppress notice
+		options.RepeatAfter = now.Sub(notice.lastRepeated)
+		return nil
+	}
+	logger.Debugf("change: %q status changed from %q to %q", chg.Kind(), oldStatus, currentStatus)
+	notice.Set("old-status", currentStatus)
+	return nil
+}
+
+func runNoticeHandler(state *State, notice *Notice, options *AddNoticeOptions, new bool) error {
+	handler := noticeHandlerTable[notice.noticeType]
+	if handler == nil {
+		return nil
+	}
+	return handler(state, notice, options, new)
+}
+
 // AddNotice records an occurrence of a notice with the specified type and key
 // and options.
 func (s *State) AddNotice(userID *uint32, noticeType NoticeType, key string, options *AddNoticeOptions) (string, error) {
@@ -247,12 +313,23 @@ func (s *State) AddNotice(userID *uint32, noticeType NoticeType, key string, opt
 			lastRepeated:  now,
 			expireAfter:   defaultNoticeExpireAfter,
 			occurrences:   1,
+
+			state:        s,
+			internalData: make(customData),
+		}
+		err := runNoticeHandler(s, notice, options, true)
+		if err != nil {
+			return "", err
 		}
 		s.notices[uniqueKey] = notice
 		newOrRepeated = true
 	} else {
 		// Additional occurrence, update existing notice
 		notice.occurrences++
+		err := runNoticeHandler(s, notice, options, false)
+		if err != nil {
+			return "", err
+		}
 		if options.RepeatAfter == 0 || now.After(notice.lastRepeated.Add(options.RepeatAfter)) {
 			// Update last repeated time if repeat-after time has elapsed (or is zero)
 			notice.lastRepeated = now
