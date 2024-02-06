@@ -22,6 +22,7 @@ package state
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -429,8 +430,37 @@ func (c *Change) addNotice() error {
 	opts := &AddNoticeOptions{
 		Data: map[string]string{"kind": c.Kind()},
 	}
-	_, err := c.state.AddNotice(nil, ChangeUpdateNotice, c.id, opts)
-	return err
+	id, err := c.state.AddNotice(nil, ChangeUpdateNotice, c.id, opts)
+	if err != nil {
+		return err
+	}
+	c.state.Notice(id).Set("old-status", c.Status())
+	return nil
+}
+
+func (c *Change) maybeAddNotice() error {
+	filter := &NoticeFilter{
+		Types: []NoticeType{ChangeUpdateNotice},
+		Keys:  []string{c.id},
+	}
+	notices := c.state.Notices(filter)
+	if len(notices) == 0 {
+		return c.addNotice()
+	}
+
+	var old Status
+	err := notices[0].Get("old-status", &old)
+	if err != nil && !errors.Is(err, ErrNoState) {
+		return err
+	}
+
+	new := c.Status()
+	if (old == new) || (old == DoingStatus && new == DoStatus) || (old == UndoingStatus && new == UndoStatus) {
+		// skip
+		return nil
+	}
+	logger.Debugf("change: %q status changed from %q to %q", c.Kind(), old, new)
+	return c.addNotice()
 }
 
 func (c *Change) notifyStatusChange(new Status) {
@@ -439,11 +469,7 @@ func (c *Change) notifyStatusChange(new Status) {
 	}
 	c.state.notifyChangeStatusChangedHandlers(c, c.lastObservedStatus, new)
 	// Add change-update notice for status change
-	// Note: Change status alternates rapidly between “Do” and “Doing”
-	// statuses because it gets computed based on an aggregation of its
-	// tasks' statuses so we might be sending a lot of change-update
-	// notices.
-	if err := c.addNotice(); err != nil {
+	if err := c.maybeAddNotice(); err != nil {
 		logger.Panicf(`internal error: failed to add "change-update" notice: %v`, err)
 	}
 	c.lastObservedStatus = new

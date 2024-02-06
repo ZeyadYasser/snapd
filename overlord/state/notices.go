@@ -82,6 +82,9 @@ type Notice struct {
 	// The repeatAfter duration must be less than this, because the notice
 	// won't be tracked after it expires.
 	expireAfter time.Duration
+
+	state        *State
+	internalData customData
 }
 
 func (n *Notice) String() string {
@@ -90,6 +93,21 @@ func (n *Notice) String() string {
 		userIDStr = strconv.FormatUint(uint64(*n.userID), 10)
 	}
 	return fmt.Sprintf("Notice %s (%s:%s:%s)", n.id, userIDStr, n.noticeType, n.key)
+}
+
+func (n *Notice) Get(key string, value interface{}) error {
+	n.state.reading()
+	return n.internalData.get(key, value)
+}
+
+func (n *Notice) Set(key string, value interface{}) {
+	n.state.writing()
+	n.internalData.set(key, value)
+}
+
+func (n *Notice) Has(key string) bool {
+	n.state.reading()
+	return n.internalData.has(key)
 }
 
 // UserID returns the value of the notice's user ID and whether it is set.
@@ -247,6 +265,9 @@ func (s *State) AddNotice(userID *uint32, noticeType NoticeType, key string, opt
 			lastRepeated:  now,
 			expireAfter:   defaultNoticeExpireAfter,
 			occurrences:   1,
+
+			state:        s,
+			internalData: make(customData),
 		}
 		s.notices[uniqueKey] = notice
 		newOrRepeated = true
