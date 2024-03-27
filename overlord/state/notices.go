@@ -199,11 +199,14 @@ const (
 
 	// Recorded whenever an auto-refresh is inhibited for one or more snaps.
 	RefreshInhibitNotice NoticeType = "refresh-inhibit"
+
+	// Recorded whenever "snap run" is inhibited due refresh.
+	SnapRunInhibitNotice NoticeType = "snap-run-inhibit"
 )
 
 func (t NoticeType) Valid() bool {
 	switch t {
-	case ChangeUpdateNotice, WarningNotice, RefreshInhibitNotice:
+	case ChangeUpdateNotice, WarningNotice, RefreshInhibitNotice, SnapRunInhibitNotice:
 		return true
 	}
 	return false

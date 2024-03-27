@@ -284,3 +284,16 @@ func snapIcon(info snap.PlaceInfo) string {
 
 	return found[0]
 }
+
+func snapInstanceExists(st *state.State, name string) (bool, error) {
+	var snapst snapstate.SnapState
+	err := snapstate.Get(st, name, &snapst)
+	if errors.Is(err, state.ErrNoState) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}

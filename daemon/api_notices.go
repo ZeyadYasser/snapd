@@ -16,6 +16,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -31,13 +32,16 @@ import (
 var noticeReadInterfaces = map[state.NoticeType][]string{
 	state.ChangeUpdateNotice:   {"snap-refresh-observe"},
 	state.RefreshInhibitNotice: {"snap-refresh-observe"},
+	state.SnapRunInhibitNotice: {"snap-refresh-observe"},
 }
 
 var (
 	noticesCmd = &Command{
-		Path:       "/v2/notices",
-		GET:        getNotices,
-		ReadAccess: interfaceOpenAccess{Interfaces: []string{"snap-refresh-observe"}},
+		Path:        "/v2/notices",
+		GET:         getNotices,
+		POST:        postNotices,
+		ReadAccess:  interfaceOpenAccess{Interfaces: []string{"snap-refresh-observe"}},
+		WriteAccess: authenticatedAccess{Polkit: polkitActionManage},
 	}
 
 	noticeCmd = &Command{
@@ -46,6 +50,14 @@ var (
 		ReadAccess: interfaceOpenAccess{Interfaces: []string{"snap-refresh-observe"}},
 	}
 )
+
+const (
+	maxNoticeKeyLength = 256
+)
+
+type addedNotice struct {
+	ID string `json:"id"`
+}
 
 func getNotices(c *Command, r *http.Request, user *auth.UserState) Response {
 	query := r.URL.Query()
@@ -230,6 +242,53 @@ func allowedNoticeTypesForInterface(iface string) []state.NoticeType {
 	}
 
 	return types
+}
+
+func postNotices(c *Command, r *http.Request, user *auth.UserState) Response {
+	requestUID, err := uidFromRequest(r)
+	if err != nil {
+		return Forbidden("cannot determine UID of request, so cannot create notice")
+	}
+
+	var payload struct {
+		Action string `json:"action"`
+		Type   string `json:"type"`
+		Key    string `json:"key"`
+		// NOTE: Data and RepeatAfter fields are not needed for snap-run-inhibit notices.
+	}
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&payload); err != nil {
+		return BadRequest("cannot decode request body: %v", err)
+	}
+
+	if payload.Action != "add" {
+		return BadRequest("invalid action %q", payload.Action)
+	}
+	if payload.Type != "snap-run-inhibit" {
+		return BadRequest(`invalid type %q (can only add "snap-run-inhibit" notices)`, payload.Type)
+	}
+	if len(payload.Key) > maxNoticeKeyLength {
+		return BadRequest("key must be %d bytes or less", maxNoticeKeyLength)
+	}
+
+	st := c.d.overlord.State()
+	st.Lock()
+	defer st.Unlock()
+
+	exists, err := snapInstanceExists(st, payload.Key)
+	if err != nil {
+		return InternalError("cannot check snap in state: %v", err)
+	}
+	if !exists {
+		return BadRequest("snap %q does not exist", payload.Key)
+	}
+
+	noticeId, err := st.AddNotice(&requestUID, state.SnapRunInhibitNotice, payload.Key, nil)
+	if err != nil {
+		return InternalError("%v", err)
+	}
+
+	return SyncResponse(addedNotice{ID: noticeId})
 }
 
 func getNotice(c *Command, r *http.Request, user *auth.UserState) Response {
