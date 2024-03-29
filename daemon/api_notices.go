@@ -41,7 +41,7 @@ var (
 		GET:         getNotices,
 		POST:        postNotices,
 		ReadAccess:  interfaceOpenAccess{Interfaces: []string{"snap-refresh-observe"}},
-		WriteAccess: authenticatedAccess{Polkit: polkitActionManage},
+		WriteAccess: authenticatedAccess{},
 	}
 
 	noticeCmd = &Command{

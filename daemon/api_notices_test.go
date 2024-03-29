@@ -46,7 +46,7 @@ func (s *noticesSuite) SetUpTest(c *C) {
 	s.apiBaseSuite.SetUpTest(c)
 
 	s.expectReadAccess(daemon.InterfaceOpenAccess{Interfaces: []string{"snap-refresh-observe"}})
-	s.expectWriteAccess(daemon.AuthenticatedAccess{Polkit: "io.snapcraft.snapd.manage"})
+	s.expectWriteAccess(daemon.AuthenticatedAccess{})
 }
 
 func (s *noticesSuite) TestNoticesFilterUserID(c *C) {
