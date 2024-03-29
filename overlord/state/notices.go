@@ -200,7 +200,8 @@ const (
 	// Recorded whenever an auto-refresh is inhibited for one or more snaps.
 	RefreshInhibitNotice NoticeType = "refresh-inhibit"
 
-	// Recorded whenever "snap run" is inhibited due refresh.
+	// Recorded by "snap run" command when it is inhibited from running a
+	// a snap due an ongoing refresh.
 	SnapRunInhibitNotice NoticeType = "snap-run-inhibit"
 )
 
