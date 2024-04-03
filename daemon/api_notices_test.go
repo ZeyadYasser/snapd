@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -46,7 +47,7 @@ func (s *noticesSuite) SetUpTest(c *C) {
 	s.apiBaseSuite.SetUpTest(c)
 
 	s.expectReadAccess(daemon.InterfaceOpenAccess{Interfaces: []string{"snap-refresh-observe"}})
-	s.expectWriteAccess(daemon.AuthenticatedAccess{})
+	s.expectWriteAccess(daemon.OpenAccess{})
 }
 
 func (s *noticesSuite) TestNoticesFilterUserID(c *C) {
@@ -809,6 +810,13 @@ func (s *noticesSuite) TestNoticeTypesViewableBySnap(c *C) {
 func (s *noticesSuite) TestAddNotice(c *C) {
 	s.daemon(c)
 
+	// mock request coming from snap command
+	restore := daemon.MockOsReadlink(func(path string) (string, error) {
+		c.Check(path, Equals, "/proc/100/exe")
+		return filepath.Join(dirs.GlobalRootDir, "/usr/bin/snap"), nil
+	})
+	defer restore()
+
 	st := s.d.Overlord().State()
 	st.Lock()
 	// mock existing snap
@@ -905,12 +913,86 @@ func (s *noticesSuite) TestAddNoticeInvalidSnap(c *C) {
 func (s *noticesSuite) testAddNoticeBadRequest(c *C, body, errorMatch string) {
 	s.daemon(c)
 
+	// mock request coming from snap command
+	restore := daemon.MockOsReadlink(func(path string) (string, error) {
+		c.Check(path, Equals, "/proc/100/exe")
+		return filepath.Join(dirs.GlobalRootDir, "/usr/bin/snap"), nil
+	})
+	defer restore()
+
 	req, err := http.NewRequest("POST", "/v2/notices", strings.NewReader(body))
 	c.Assert(err, IsNil)
 	req.RemoteAddr = "pid=100;uid=1000;socket=;"
 	rsp := s.errorReq(c, req, nil)
 	c.Check(rsp.Status, Equals, 400)
 	c.Assert(rsp.Message, Matches, errorMatch)
+}
+
+func (s *noticesSuite) TestAddNoticesSnapCmdNoReexec(c *C) {
+	s.testAddNoticesSnapCmd(c, "/usr/bin/snap", false)
+}
+
+func (s *noticesSuite) TestAddNoticesSnapCmdReexecSnapd(c *C) {
+	s.testAddNoticesSnapCmd(c, "/snap/snapd/11/usr/bin/snap", false)
+}
+
+func (s *noticesSuite) TestAddNoticesSnapCmdReexecCore(c *C) {
+	s.testAddNoticesSnapCmd(c, "/snap/core/12/usr/bin/snap", false)
+}
+
+func (s *noticesSuite) TestAddNoticesSnapCmdUnknownBinary(c *C) {
+	s.testAddNoticesSnapCmd(c, "/snap/bad-c0re/12/usr/bin/snap", true)
+}
+
+func (s *noticesSuite) testAddNoticesSnapCmd(c *C, exePath string, shouldFail bool) {
+	s.daemon(c)
+
+	// mock request coming from snap command
+	restore := daemon.MockOsReadlink(func(path string) (string, error) {
+		c.Check(path, Equals, "/proc/100/exe")
+		return filepath.Join(dirs.GlobalRootDir, exePath), nil
+	})
+	defer restore()
+
+	st := s.d.Overlord().State()
+	st.Lock()
+	// mock snapd snap
+	snapstate.Set(st, "snapd", &snapstate.SnapState{
+		Active:   true,
+		Sequence: snapstatetest.NewSequenceFromSnapSideInfos([]*snap.SideInfo{{RealName: "snapd", Revision: snap.R(11)}}),
+		Current:  snap.R(11),
+		SnapType: "snapd",
+	})
+	// mock core snap
+	snapstate.Set(st, "core", &snapstate.SnapState{
+		Active:   true,
+		Sequence: snapstatetest.NewSequenceFromSnapSideInfos([]*snap.SideInfo{{RealName: "core", Revision: snap.R(12)}}),
+		Current:  snap.R(12),
+	})
+	// mock existing snap
+	snapstate.Set(st, "snap-name", &snapstate.SnapState{
+		Active:   true,
+		Sequence: snapstatetest.NewSequenceFromSnapSideInfos([]*snap.SideInfo{{RealName: "snap-name", Revision: snap.R(2)}}),
+	})
+	st.Unlock()
+
+	body := []byte(`{
+		"action": "add",
+		"type": "snap-run-inhibit",
+		"key": "snap-name"
+	}`)
+	req, err := http.NewRequest("POST", "/v2/notices", bytes.NewReader(body))
+	c.Assert(err, IsNil)
+	req.RemoteAddr = "pid=100;uid=1000;socket=;"
+
+	if shouldFail {
+		rsp := s.errorReq(c, req, nil)
+		c.Check(rsp.Status, Equals, 403)
+		c.Assert(rsp.Message, Matches, "only snap command can record notices")
+	} else {
+		rsp := s.syncReq(c, req, nil)
+		c.Assert(rsp.Status, Equals, 200)
+	}
 }
 
 func (s *noticesSuite) TestNotice(c *C) {

@@ -15,8 +15,11 @@
 package daemon
 
 import (
+	"os"
 	"time"
 )
+
+var osReadlink = os.Readlink
 
 // parseOptionalTime parses an RFC3339 time, or returns a zero time if s is empty.
 func parseOptionalTime(s string) (time.Time, error) {

@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/overlord/auth"
+	"github.com/snapcore/snapd/overlord/snapstate"
 	"github.com/snapcore/snapd/overlord/state"
 	"github.com/snapcore/snapd/strutil"
 )
@@ -41,7 +43,7 @@ var (
 		GET:         getNotices,
 		POST:        postNotices,
 		ReadAccess:  interfaceOpenAccess{Interfaces: []string{"snap-refresh-observe"}},
-		WriteAccess: authenticatedAccess{},
+		WriteAccess: openAccess{},
 	}
 
 	noticeCmd = &Command{
@@ -275,6 +277,14 @@ func postNotices(c *Command, r *http.Request, user *auth.UserState) Response {
 	st.Lock()
 	defer st.Unlock()
 
+	fromSnapCmd, err := requestFromSnapCmd(st, r)
+	if err != nil {
+		return InternalError("cannot check request source")
+	}
+	if !fromSnapCmd {
+		return Forbidden("only snap command can record notices")
+	}
+
 	exists, err := snapInstanceExists(st, payload.Key)
 	if err != nil {
 		return InternalError("cannot check snap in state: %v", err)
@@ -289,6 +299,49 @@ func postNotices(c *Command, r *http.Request, user *auth.UserState) Response {
 	}
 
 	return SyncResponse(addedNotice{ID: noticeId})
+}
+
+func requestFromSnapCmd(st *state.State, r *http.Request) (bool, error) {
+	ucred, err := ucrednetGet(r.RemoteAddr)
+	if err != nil {
+		return false, err
+	}
+	exe, err := osReadlink(fmt.Sprintf("/proc/%d/exe", ucred.Pid))
+	if err != nil {
+		return false, err
+	}
+
+	// SNAP_REEXEC=0
+	if exe == filepath.Join(dirs.GlobalRootDir, "/usr/bin/snap") {
+		return true, nil
+	}
+
+	// Check if re-exec in snapd
+	var snapst snapstate.SnapState
+	err = snapstate.Get(st, "snapd", &snapst)
+	if err != nil && !errors.Is(err, state.ErrNoState) {
+		return false, err
+	}
+	if err == nil {
+		snapdPath := fmt.Sprintf("snapd/%s/usr/bin/snap", snapst.CurrentSideInfo().Revision)
+		if exe == filepath.Join(dirs.SnapMountDir, snapdPath) {
+			return true, nil
+		}
+	}
+
+	// Check if re-exec in core
+	err = snapstate.Get(st, "core", &snapst)
+	if err != nil && !errors.Is(err, state.ErrNoState) {
+		return false, err
+	}
+	if err == nil {
+		corePath := fmt.Sprintf("core/%s/usr/bin/snap", snapst.CurrentSideInfo().Revision)
+		if exe == filepath.Join(dirs.SnapMountDir, corePath) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func getNotice(c *Command, r *http.Request, user *auth.UserState) Response {
