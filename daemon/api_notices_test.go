@@ -290,7 +290,7 @@ func (s *noticesSuite) TestNoticesFilterTypesForSnap(c *C) {
 	// Check that a snap request with types filter allows access to
 	// snaps with required interfaces only.
 
-	// snap-refresh-observe interface allows accessing change-update, refresh-inhibir and snap-run-inhibit notices
+	// snap-refresh-observe interface allows accessing change-update, refresh-inhibit and snap-run-inhibit notices
 	req, err := http.NewRequest("GET", "/v2/notices?types=change-update,refresh-inhibit,snap-run-inhibit", nil)
 	c.Assert(err, IsNil)
 	req.RemoteAddr = fmt.Sprintf("pid=100;uid=1000;socket=%s;iface=snap-refresh-observe;", dirs.SnapSocket)
