@@ -893,15 +893,15 @@ func (s *noticesSuite) TestAddNoticeInvalidAction(c *C) {
 }
 
 func (s *noticesSuite) TestAddNoticeInvalidTypeUnkown(c *C) {
-	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "foo"}`, "invalid type.*")
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "foo"}`, `attempted to add notice with invalid type "foo"`)
 }
 
 func (s *noticesSuite) TestAddNoticeInvalidTypeKnown(c *C) {
-	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "change-update", "key": "test"}`, "invalid type.*")
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "change-update", "key": "test"}`, "attempted to add notice with invalid type.*")
 }
 
 func (s *noticesSuite) TestAddNoticeEmptyKey(c *C) {
-	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "snap-run-inhibit", "key": ""}`, "key cannot be empty")
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "snap-run-inhibit", "key": ""}`, `attempted to add snap-run-inhibit notice with invalid key ""`)
 }
 
 func (s *noticesSuite) TestAddNoticeKeyTooLong(c *C) {
@@ -911,7 +911,7 @@ func (s *noticesSuite) TestAddNoticeKeyTooLong(c *C) {
 		"key":    strings.Repeat("x", 257),
 	})
 	c.Assert(err, IsNil)
-	s.testAddNoticeBadRequest(c, string(request), "key must be 256 bytes or less")
+	s.testAddNoticeBadRequest(c, string(request), "attempted to add snap-run-inhibit notice with invalid key, key must be 256 bytes or less")
 }
 
 func (s *noticesSuite) TestAddNoticeInvalidSnap(c *C) {

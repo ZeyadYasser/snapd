@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -665,6 +666,11 @@ func (s *noticesSuite) TestValidateNotice(c *C) {
 	// Empty key
 	id, err = st.AddNotice(nil, state.ChangeUpdateNotice, "", nil)
 	c.Check(err, ErrorMatches, `internal error: attempted to add change-update notice with invalid key ""`)
+	c.Check(id, Equals, "")
+
+	// Large key
+	id, err = st.AddNotice(nil, state.ChangeUpdateNotice, strings.Repeat("x", 257), nil)
+	c.Check(err, ErrorMatches, `internal error: attempted to add change-update notice with invalid key, key must be 256 bytes or less`)
 	c.Check(id, Equals, "")
 
 	// Unxpected key for refresh-inhibit notice

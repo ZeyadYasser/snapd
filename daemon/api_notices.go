@@ -51,10 +51,6 @@ var (
 	}
 )
 
-const (
-	maxNoticeKeyLength = 256
-)
-
 // addedNotice is the result of adding a new notice.
 type addedNotice struct {
 	// ID is the id of the newly added notice.
@@ -285,21 +281,15 @@ func (inst *noticeInstruction) validate(st *state.State, r *http.Request) *apiEr
 	if inst.Action != "add" {
 		return BadRequest("invalid action %q", inst.Action)
 	}
-	if !inst.Type.Valid() {
-		return BadRequest("invalid type %q", inst.Type)
-	}
-	if inst.Key == "" {
-		return BadRequest("key cannot be empty")
-	}
-	if len(inst.Key) > maxNoticeKeyLength {
-		return BadRequest("key must be %d bytes or less", maxNoticeKeyLength)
+	if err := state.ValidateNotice(inst.Type, inst.Key, nil); err != nil {
+		return BadRequest("%s", err)
 	}
 
 	switch inst.Type {
 	case state.SnapRunInhibitNotice:
 		return inst.validateSnapRunInhibitNotice(st, r)
 	default:
-		return BadRequest(`invalid type %q (can only add "snap-run-inhibit" notices)`, inst.Type)
+		return BadRequest(`attempted to add notice with invalid type %q (can only add "snap-run-inhibit" notices)`, inst.Type)
 	}
 }
 
