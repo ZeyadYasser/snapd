@@ -20,7 +20,6 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -33,8 +32,6 @@ import (
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/overlord/auth"
 	"github.com/snapcore/snapd/overlord/ifacestate"
-	"github.com/snapcore/snapd/overlord/snapstate"
-	"github.com/snapcore/snapd/overlord/state"
 	"github.com/snapcore/snapd/polkit"
 	"github.com/snapcore/snapd/sandbox/cgroup"
 	"github.com/snapcore/snapd/strutil"
@@ -267,8 +264,8 @@ func (ac interfaceAuthenticatedAccess) CheckAccess(d *Daemon, r *http.Request, u
 // isRequestFromSnapCmd checks that the request is coming from snap command.
 //
 // It checks that the request process "/proc/PID/exe" points to one of the
-// known locations of the snap command.
-func isRequestFromSnapCmd(st *state.State, r *http.Request) (bool, error) {
+// known locations of the snap command. This not a security-oriented check.
+func isRequestFromSnapCmd(r *http.Request) (bool, error) {
 	ucred, err := ucrednetGet(r.RemoteAddr)
 	if err != nil {
 		return false, err
@@ -284,28 +281,19 @@ func isRequestFromSnapCmd(st *state.State, r *http.Request) (bool, error) {
 	}
 
 	// Check if re-exec in snapd
-	var snapst snapstate.SnapState
-	err = snapstate.Get(st, "snapd", &snapst)
-	if err != nil && !errors.Is(err, state.ErrNoState) {
+	path := filepath.Join(dirs.SnapMountDir, "snapd/*/usr/bin/snap")
+	if matched, err := filepath.Match(path, exe); err != nil {
 		return false, err
-	}
-	if err == nil {
-		snapdPath := fmt.Sprintf("snapd/%s/usr/bin/snap", snapst.CurrentSideInfo().Revision)
-		if exe == filepath.Join(dirs.SnapMountDir, snapdPath) {
-			return true, nil
-		}
+	} else if matched {
+		return true, nil
 	}
 
 	// Check if re-exec in core
-	err = snapstate.Get(st, "core", &snapst)
-	if err != nil && !errors.Is(err, state.ErrNoState) {
+	path = filepath.Join(dirs.SnapMountDir, "core/*/usr/bin/snap")
+	if matched, err := filepath.Match(path, exe); err != nil {
 		return false, err
-	}
-	if err == nil {
-		corePath := fmt.Sprintf("core/%s/usr/bin/snap", snapst.CurrentSideInfo().Revision)
-		if exe == filepath.Join(dirs.SnapMountDir, corePath) {
-			return true, nil
-		}
+	} else if matched {
+		return true, nil
 	}
 
 	return false, nil

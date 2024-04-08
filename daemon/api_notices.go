@@ -294,7 +294,7 @@ func (inst *noticeInstruction) validate(st *state.State, r *http.Request) *apiEr
 }
 
 func (inst *noticeInstruction) validateSnapRunInhibitNotice(st *state.State, r *http.Request) *apiError {
-	if fromSnapCmd, err := isRequestFromSnapCmd(st, r); err != nil {
+	if fromSnapCmd, err := isRequestFromSnapCmd(r); err != nil {
 		return InternalError("cannot check request source: %v", err)
 	} else if !fromSnapCmd {
 		return Forbidden("only snap command can record notices")
