@@ -892,8 +892,16 @@ func (s *noticesSuite) TestAddNoticeInvalidAction(c *C) {
 	s.testAddNoticeBadRequest(c, `{"action": "bad"}`, "invalid action.*")
 }
 
-func (s *noticesSuite) TestAddNoticeInvalidType(c *C) {
+func (s *noticesSuite) TestAddNoticeInvalidTypeUnkown(c *C) {
 	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "foo"}`, "invalid type.*")
+}
+
+func (s *noticesSuite) TestAddNoticeInvalidTypeKnown(c *C) {
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "change-update", "key": "test"}`, "invalid type.*")
+}
+
+func (s *noticesSuite) TestAddNoticeEmptyKey(c *C) {
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "snap-run-inhibit", "key": ""}`, "key cannot be empty")
 }
 
 func (s *noticesSuite) TestAddNoticeKeyTooLong(c *C) {

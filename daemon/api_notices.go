@@ -252,47 +252,71 @@ func postNotices(c *Command, r *http.Request, user *auth.UserState) Response {
 		return Forbidden("cannot determine UID of request, so cannot create notice")
 	}
 
-	var payload struct {
-		Action string `json:"action"`
-		Type   string `json:"type"`
-		Key    string `json:"key"`
-		// NOTE: Data and RepeatAfter fields are not needed for snap-run-inhibit notices.
-	}
 	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(&payload); err != nil {
-		return BadRequest("cannot decode request body: %v", err)
+	var inst noticeInstruction
+	if err := decoder.Decode(&inst); err != nil {
+		return BadRequest("cannot decode request body into notice instruction: %v", err)
 	}
 
 	st := c.d.overlord.State()
 	st.Lock()
 	defer st.Unlock()
 
-	if payload.Action != "add" {
-		return BadRequest("invalid action %q", payload.Action)
-	}
-	if fromSnapCmd, err := isRequestFromSnapCmd(st, r); err != nil {
-		return InternalError("cannot check request source")
-	} else if !fromSnapCmd {
-		return Forbidden("only snap command can record notices")
-	}
-	if payload.Type != "snap-run-inhibit" {
-		return BadRequest(`invalid type %q (can only add "snap-run-inhibit" notices)`, payload.Type)
-	}
-	if len(payload.Key) > maxNoticeKeyLength {
-		return BadRequest("key must be %d bytes or less", maxNoticeKeyLength)
-	}
-	if exists, err := snapInstanceExists(st, payload.Key); err != nil {
-		return InternalError("cannot check snap in state: %v", err)
-	} else if !exists {
-		return BadRequest("snap %q does not exist", payload.Key)
+	if err := inst.validate(st, r); err != nil {
+		return err
 	}
 
-	noticeId, err := st.AddNotice(&requestUID, state.SnapRunInhibitNotice, payload.Key, nil)
+	noticeId, err := st.AddNotice(&requestUID, state.SnapRunInhibitNotice, inst.Key, nil)
 	if err != nil {
 		return InternalError("%v", err)
 	}
 
 	return SyncResponse(addedNotice{ID: noticeId})
+}
+
+type noticeInstruction struct {
+	Action string           `json:"action"`
+	Type   state.NoticeType `json:"type"`
+	Key    string           `json:"key"`
+	// NOTE: Data and RepeatAfter fields are not needed for snap-run-inhibit notices.
+}
+
+func (inst *noticeInstruction) validate(st *state.State, r *http.Request) *apiError {
+	if inst.Action != "add" {
+		return BadRequest("invalid action %q", inst.Action)
+	}
+	if !inst.Type.Valid() {
+		return BadRequest("invalid type %q", inst.Type)
+	}
+	if inst.Key == "" {
+		return BadRequest("key cannot be empty")
+	}
+	if len(inst.Key) > maxNoticeKeyLength {
+		return BadRequest("key must be %d bytes or less", maxNoticeKeyLength)
+	}
+
+	switch inst.Type {
+	case state.SnapRunInhibitNotice:
+		return inst.validateSnapRunInhibitNotice(st, r)
+	default:
+		return BadRequest(`invalid type %q (can only add "snap-run-inhibit" notices)`, inst.Type)
+	}
+}
+
+func (inst *noticeInstruction) validateSnapRunInhibitNotice(st *state.State, r *http.Request) *apiError {
+	if fromSnapCmd, err := isRequestFromSnapCmd(st, r); err != nil {
+		return InternalError("cannot check request source")
+	} else if !fromSnapCmd {
+		return Forbidden("only snap command can record notices")
+	}
+
+	if exists, err := snapInstanceExists(st, inst.Key); err != nil {
+		return InternalError("cannot check snap in state: %v", err)
+	} else if !exists {
+		return BadRequest("snap %q does not exist", inst.Key)
+	}
+
+	return nil
 }
 
 func getNotice(c *Command, r *http.Request, user *auth.UserState) Response {
