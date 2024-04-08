@@ -289,13 +289,13 @@ func (inst *noticeInstruction) validate(st *state.State, r *http.Request) *apiEr
 	case state.SnapRunInhibitNotice:
 		return inst.validateSnapRunInhibitNotice(st, r)
 	default:
-		return BadRequest(`attempted to add notice with invalid type %q (can only add "snap-run-inhibit" notices)`, inst.Type)
+		return BadRequest(`cannot add notice with invalid type %q (can only add "snap-run-inhibit" notices)`, inst.Type)
 	}
 }
 
 func (inst *noticeInstruction) validateSnapRunInhibitNotice(st *state.State, r *http.Request) *apiError {
 	if fromSnapCmd, err := isRequestFromSnapCmd(st, r); err != nil {
-		return InternalError("cannot check request source")
+		return InternalError("cannot check request source: %v", err)
 	} else if !fromSnapCmd {
 		return Forbidden("only snap command can record notices")
 	}

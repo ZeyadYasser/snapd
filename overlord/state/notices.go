@@ -288,16 +288,16 @@ func (s *State) AddNotice(userID *uint32, noticeType NoticeType, key string, opt
 // ValidateNotice validates notice type and key before adding.
 func ValidateNotice(noticeType NoticeType, key string, options *AddNoticeOptions) error {
 	if !noticeType.Valid() {
-		return fmt.Errorf("attempted to add notice with invalid type %q", noticeType)
+		return fmt.Errorf("cannot add notice with invalid type %q", noticeType)
 	}
 	if key == "" {
-		return fmt.Errorf("attempted to add %s notice with invalid key %q", noticeType, key)
+		return fmt.Errorf("cannot add %s notice with invalid key %q", noticeType, key)
 	}
 	if len(key) > maxNoticeKeyLength {
-		return fmt.Errorf("attempted to add %s notice with invalid key, key must be %d bytes or less", noticeType, maxNoticeKeyLength)
+		return fmt.Errorf("cannot add %s notice with invalid key: key must be %d bytes or less", noticeType, maxNoticeKeyLength)
 	}
 	if noticeType == RefreshInhibitNotice && key != "-" {
-		return fmt.Errorf(`attempted to add %s notice with invalid key %q, only "-" key is supported`, noticeType, key)
+		return fmt.Errorf(`cannot add %s notice with invalid key %q: only "-" key is supported`, noticeType, key)
 	}
 	return nil
 }

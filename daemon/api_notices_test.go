@@ -893,15 +893,15 @@ func (s *noticesSuite) TestAddNoticeInvalidAction(c *C) {
 }
 
 func (s *noticesSuite) TestAddNoticeInvalidTypeUnkown(c *C) {
-	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "foo"}`, `attempted to add notice with invalid type "foo"`)
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "foo"}`, `cannot add notice with invalid type "foo"`)
 }
 
 func (s *noticesSuite) TestAddNoticeInvalidTypeKnown(c *C) {
-	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "change-update", "key": "test"}`, "attempted to add notice with invalid type.*")
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "change-update", "key": "test"}`, "cannot add notice with invalid type.*")
 }
 
 func (s *noticesSuite) TestAddNoticeEmptyKey(c *C) {
-	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "snap-run-inhibit", "key": ""}`, `attempted to add snap-run-inhibit notice with invalid key ""`)
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "snap-run-inhibit", "key": ""}`, `cannot add snap-run-inhibit notice with invalid key ""`)
 }
 
 func (s *noticesSuite) TestAddNoticeKeyTooLong(c *C) {
@@ -911,7 +911,7 @@ func (s *noticesSuite) TestAddNoticeKeyTooLong(c *C) {
 		"key":    strings.Repeat("x", 257),
 	})
 	c.Assert(err, IsNil)
-	s.testAddNoticeBadRequest(c, string(request), "attempted to add snap-run-inhibit notice with invalid key, key must be 256 bytes or less")
+	s.testAddNoticeBadRequest(c, string(request), "cannot add snap-run-inhibit notice with invalid key: key must be 256 bytes or less")
 }
 
 func (s *noticesSuite) TestAddNoticeInvalidSnap(c *C) {
@@ -964,19 +964,6 @@ func (s *noticesSuite) testAddNoticesSnapCmd(c *C, exePath string, shouldFail bo
 
 	st := s.d.Overlord().State()
 	st.Lock()
-	// mock snapd snap
-	snapstate.Set(st, "snapd", &snapstate.SnapState{
-		Active:   true,
-		Sequence: snapstatetest.NewSequenceFromSnapSideInfos([]*snap.SideInfo{{RealName: "snapd", Revision: snap.R(11)}}),
-		Current:  snap.R(11),
-		SnapType: "snapd",
-	})
-	// mock core snap
-	snapstate.Set(st, "core", &snapstate.SnapState{
-		Active:   true,
-		Sequence: snapstatetest.NewSequenceFromSnapSideInfos([]*snap.SideInfo{{RealName: "core", Revision: snap.R(12)}}),
-		Current:  snap.R(12),
-	})
 	// mock existing snap
 	snapstate.Set(st, "snap-name", &snapstate.SnapState{
 		Active:   true,

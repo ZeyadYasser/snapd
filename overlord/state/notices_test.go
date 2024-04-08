@@ -660,22 +660,22 @@ func (s *noticesSuite) TestValidateNotice(c *C) {
 
 	// Invalid type
 	id, err := st.AddNotice(nil, "bad-type", "123", nil)
-	c.Check(err, ErrorMatches, `internal error: attempted to add notice with invalid type "bad-type"`)
+	c.Check(err, ErrorMatches, `internal error: cannot add notice with invalid type "bad-type"`)
 	c.Check(id, Equals, "")
 
 	// Empty key
 	id, err = st.AddNotice(nil, state.ChangeUpdateNotice, "", nil)
-	c.Check(err, ErrorMatches, `internal error: attempted to add change-update notice with invalid key ""`)
+	c.Check(err, ErrorMatches, `internal error: cannot add change-update notice with invalid key ""`)
 	c.Check(id, Equals, "")
 
 	// Large key
 	id, err = st.AddNotice(nil, state.ChangeUpdateNotice, strings.Repeat("x", 257), nil)
-	c.Check(err, ErrorMatches, `internal error: attempted to add change-update notice with invalid key, key must be 256 bytes or less`)
+	c.Check(err, ErrorMatches, `internal error: cannot add change-update notice with invalid key: key must be 256 bytes or less`)
 	c.Check(id, Equals, "")
 
 	// Unxpected key for refresh-inhibit notice
 	id, err = st.AddNotice(nil, state.RefreshInhibitNotice, "123", nil)
-	c.Check(err, ErrorMatches, `internal error: attempted to add refresh-inhibit notice with invalid key "123", only "-" key is supported`)
+	c.Check(err, ErrorMatches, `internal error: cannot add refresh-inhibit notice with invalid key "123": only "-" key is supported`)
 	c.Check(id, Equals, "")
 }
 
