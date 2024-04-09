@@ -26,6 +26,7 @@ import (
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/overlord/auth"
 	"github.com/snapcore/snapd/overlord/state"
+	"github.com/snapcore/snapd/snap/naming"
 	"github.com/snapcore/snapd/strutil"
 )
 
@@ -258,7 +259,7 @@ func postNotices(c *Command, r *http.Request, user *auth.UserState) Response {
 	st.Lock()
 	defer st.Unlock()
 
-	if err := inst.validate(st, r); err != nil {
+	if err := inst.validate(r); err != nil {
 		return err
 	}
 
@@ -277,7 +278,7 @@ type noticeInstruction struct {
 	// NOTE: Data and RepeatAfter fields are not needed for snap-run-inhibit notices.
 }
 
-func (inst *noticeInstruction) validate(st *state.State, r *http.Request) *apiError {
+func (inst *noticeInstruction) validate(r *http.Request) *apiError {
 	if inst.Action != "add" {
 		return BadRequest("invalid action %q", inst.Action)
 	}
@@ -287,23 +288,21 @@ func (inst *noticeInstruction) validate(st *state.State, r *http.Request) *apiEr
 
 	switch inst.Type {
 	case state.SnapRunInhibitNotice:
-		return inst.validateSnapRunInhibitNotice(st, r)
+		return inst.validateSnapRunInhibitNotice(r)
 	default:
 		return BadRequest(`cannot add notice with invalid type %q (can only add "snap-run-inhibit" notices)`, inst.Type)
 	}
 }
 
-func (inst *noticeInstruction) validateSnapRunInhibitNotice(st *state.State, r *http.Request) *apiError {
+func (inst *noticeInstruction) validateSnapRunInhibitNotice(r *http.Request) *apiError {
 	if fromSnapCmd, err := isRequestFromSnapCmd(r); err != nil {
 		return InternalError("cannot check request source: %v", err)
 	} else if !fromSnapCmd {
 		return Forbidden("only snap command can record notices")
 	}
 
-	if exists, err := snapInstanceExists(st, inst.Key); err != nil {
-		return InternalError("cannot check snap in state: %v", err)
-	} else if !exists {
-		return BadRequest("snap %q does not exist", inst.Key)
+	if err := naming.ValidateInstance(inst.Key); err != nil {
+		return BadRequest("invalid key: %v", err)
 	}
 
 	return nil

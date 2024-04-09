@@ -914,8 +914,8 @@ func (s *noticesSuite) TestAddNoticeKeyTooLong(c *C) {
 	s.testAddNoticeBadRequest(c, string(request), "cannot add snap-run-inhibit notice with invalid key: key must be 256 bytes or less")
 }
 
-func (s *noticesSuite) TestAddNoticeInvalidSnap(c *C) {
-	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "snap-run-inhibit", "key": "snap-name"}`, `snap "snap-name" does not exist`)
+func (s *noticesSuite) TestAddNoticeInvalidSnapName(c *C) {
+	s.testAddNoticeBadRequest(c, `{"action": "add", "type": "snap-run-inhibit", "key": "Snap-Name"}`, `invalid key: invalid snap name: "Snap-Name"`)
 }
 
 func (s *noticesSuite) testAddNoticeBadRequest(c *C, body, errorMatch string) {
