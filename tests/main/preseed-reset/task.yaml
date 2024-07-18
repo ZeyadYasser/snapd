@@ -7,6 +7,7 @@ details: |
 # Ubuntu 24.04: there is no longer any seeded snaps in base or minimal cloud images
 # https://bugs.launchpad.net/ubuntu/+source/ubuntu-meta/+bug/2051346
 # https://bugs.launchpad.net/ubuntu/+source/ubuntu-meta/+bug/2051572
+# TODO: include Ubuntu 24.04 when a seeded image is created/available
 systems: [ubuntu-20*, ubuntu-22*, ubuntu-23*]
 
 environment:

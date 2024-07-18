@@ -4,9 +4,11 @@ details: |
   Check that having a vulnerable snapd installed, the refresh to a fixed version
   removes the vulnerabilities and the previous revision is removed.
 
-# just focal is fine for this test - we only need to check that things happen on
-# classic
-systems: [ubuntu-2*]
+# Ubuntu 24.04: there is no longer any seeded snaps in base or minimal cloud images
+# https://bugs.launchpad.net/ubuntu/+source/ubuntu-meta/+bug/2051346
+# https://bugs.launchpad.net/ubuntu/+source/ubuntu-meta/+bug/2051572
+# TODO: include Ubuntu 24.04 when a seeded image is created/available
+systems: [ubuntu-20*, ubuntu-22*, ubuntu-23*]
 
 environment:
   # which snap snapd comes from in this test

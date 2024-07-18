@@ -5,7 +5,11 @@ details: |
   command works, and the resulting image boots and finalizes seeding.
   The test assumes cloud image with a core and lxd snaps in its seeds/.
 
-systems: [ubuntu-2*]
+# Ubuntu 24.04: there is no longer any seeded snaps in base or minimal cloud images
+# https://bugs.launchpad.net/ubuntu/+source/ubuntu-meta/+bug/2051346
+# https://bugs.launchpad.net/ubuntu/+source/ubuntu-meta/+bug/2051572
+# TODO: include Ubuntu 24.04 when a seeded image is created/available
+systems: [ubuntu-20*, ubuntu-22*, ubuntu-23*]
 
 environment:
   IMAGE_MOUNTPOINT: /mnt/cloudimg
@@ -19,6 +23,8 @@ prepare: |
   mkdir -p "$IMAGE_MOUNTPOINT"
   IMAGE_NAME=$(tests.nested get image-name classic)
   mount_ubuntu_image "$(tests.nested get images-path)/$IMAGE_NAME" "$IMAGE_MOUNTPOINT"
+
+  exit 1
 
   # on 20.04 snapd from the deb is newer than snapd from seeds;
   # this is not a sensible scenario for preseeding but since
