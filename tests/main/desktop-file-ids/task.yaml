@@ -1,0 +1,22 @@
+summary: TODO
+
+details: |
+    TODO
+
+# Disabled on Ubuntu Core because it doesn't provide the "desktop" slot.
+# TODO: Enable for Ubuntu Core Desktop when it is available.
+systems:
+    - -ubuntu-core-*
+
+prepare: |
+    "$TESTSTOOLS"/snaps-state install-local test-snapd-desktop-file-ids
+    tests.session -u test prepare
+
+restore: |
+    tests.session -u test restore
+
+execute: |
+    # TODO: Check all desktop files exist
+    # TODO: For distros that support apparmor, check snap can access its own files but not other files
+    # TODO: Check parallel installs
+    tests.session -u test exec test-snapd-desktop-file-ids.check-dirs /home/test/snap/test-snapd-desktop/current 2>stderr.log
