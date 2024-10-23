@@ -48,6 +48,9 @@ func (s *snapConfSuite) SetUpTest(c *check.C) {
 
 	s.expectReadAccess(daemon.AuthenticatedAccess{Polkit: "io.snapcraft.snapd.manage-configuration"})
 	s.expectWriteAccess(daemon.AuthenticatedAccess{Polkit: "io.snapcraft.snapd.manage-configuration"})
+
+	// Skip fetching external configs in testing
+	config.ClearExternalConfigMap()
 }
 
 func (s *snapConfSuite) runGetConf(c *check.C, snapName string, keys []string, statusCode int) map[string]interface{} {
