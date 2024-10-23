@@ -96,16 +96,10 @@ func IsSupportedExperimentalFlag(flag string) bool {
 
 func MockSupportedExperimentalFlags(flags []string) (restore func()) {
 	restore = testutil.Backup(&supportedConfigurations)
-	// Remove all experimental flags
-	for k := range supportedConfigurations {
-		if !strings.HasPrefix(k, "core.experimental.") {
-			continue
-		}
-		delete(supportedConfigurations, k)
-	}
-	// Add supported flags
+	newConfs := make(map[string]bool, len(flags))
 	for _, flag := range flags {
-		supportedConfigurations["core.experimental."+flag] = true
+		newConfs["core.experimental."+flag] = true
 	}
+	supportedConfigurations = newConfs
 	return restore
 }

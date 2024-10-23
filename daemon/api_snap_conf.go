@@ -84,7 +84,7 @@ func getSnapConf(c *Command, r *http.Request, user *auth.UserState) Response {
 		// Hide old experimental features (that are no longer experimental)
 		if snapName == "core" {
 			var err *apiError
-			value, err = cleanExperimentalFlags(key, value)
+			value, err = pruneExperimentalFlags(key, value)
 			if err != nil {
 				return err
 			}
@@ -102,7 +102,7 @@ func getSnapConf(c *Command, r *http.Request, user *auth.UserState) Response {
 	return SyncResponse(currentConfValues)
 }
 
-// cleanExperimentalFlags returns an exact copy of val after hiding experimental
+// pruneExperimentalFlags returns an exact copy of val after hiding experimental
 // features that are no longer supported from core.experimental configuration
 // generic queries (i.e. key is "" or "experimental").
 // For exact queries (e.g. core.experimental.old-flag) a client.ErrorKindConfigNoSuchOption
@@ -110,7 +110,7 @@ func getSnapConf(c *Command, r *http.Request, user *auth.UserState) Response {
 //
 // This helper should only be called for core configurations. Any errors when parsing
 // core config are ignored and val is returned without modification.
-func cleanExperimentalFlags(key string, val interface{}) (interface{}, *apiError) {
+func pruneExperimentalFlags(key string, val interface{}) (interface{}, *apiError) {
 	if val == nil {
 		return val, nil
 	}
