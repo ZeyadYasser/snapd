@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/canonical/go-tpm2"
 	"github.com/canonical/go-tpm2/mu"
@@ -64,6 +65,7 @@ var (
 	sbReadKeyData                                   = sb.ReadKeyData
 	sbReadSealedKeyObjectFromFile                   = sb_tpm2.ReadSealedKeyObjectFromFile
 	sbNewTPMProtectedKey                            = sb_tpm2.NewTPMProtectedKey
+	sbNewTPMPassphraseProtectedKey                  = sb_tpm2.NewTPMPassphraseProtectedKey
 	sbNewKeyDataFromSealedKeyObjectFile             = sb_tpm2.NewKeyDataFromSealedKeyObjectFile
 
 	randutilRandomKernelUUID = randutil.RandomKernelUUID
@@ -481,6 +483,27 @@ func ProvisionForCVM(initramfsUbuntuSeedDir string) error {
 	return nil
 }
 
+func sbKDFOptions(kdfType string, kdfTime time.Duration) (sb.KDFOptions, error) {
+	switch kdfType {
+	case "argon2id":
+		return &sb.Argon2Options{
+			Mode:           sb.Argon2id,
+			TargetDuration: kdfTime,
+		}, nil
+	case "argon2i":
+		return &sb.Argon2Options{
+			Mode:           sb.Argon2i,
+			TargetDuration: kdfTime,
+		}, nil
+	case "pbkdf2":
+		return &sb.PBKDF2Options{
+			TargetDuration: kdfTime,
+		}, nil
+	default:
+		return nil, fmt.Errorf("internal error: unknown kdfType passed %q", kdfType)
+	}
+}
+
 // SealKeys seals the encryption keys according to the specified parameters. The
 // TPM must have already been provisioned. If sealed key already exists at the
 // PCR handle, SealKeys will fail and return an error.
@@ -518,7 +541,30 @@ func SealKeys(keys []SealKeyRequest, params *SealKeysParams) ([]byte, error) {
 			PCRPolicyCounterHandle: tpm2.Handle(pcrHandle),
 			PrimaryKey:             primaryKey,
 		}
-		protectedKey, primaryKeyOut, unlockKey, err := sbNewTPMProtectedKey(tpm, creationParams)
+		var protectedKey *sb.KeyData
+		var primaryKeyOut sb.PrimaryKey
+		var unlockKey sb.DiskUnlockKey
+		var err error
+		if key.VolumesAuth != nil {
+			kdfOptions, kdferr := sbKDFOptions(key.VolumesAuth.KDFType, key.VolumesAuth.KDFTime)
+			if kdferr != nil {
+				return nil, kdferr
+			}
+			logger.Noticef("DEBUG: volume-auth passed")
+			passphraseParams := &sb_tpm2.PassphraseProtectKeyParams{KDFOptions: kdfOptions}
+			passphraseParams.PCRProfile = pcrProfile
+			passphraseParams.PCRPolicyCounterHandle = tpm2.Handle(pcrHandle)
+			passphraseParams.PrimaryKey = primaryKey
+			logger.Noticef("DEBUG: passphraseParams: %v", passphraseParams)
+			protectedKey, primaryKeyOut, unlockKey, err = sbNewTPMPassphraseProtectedKey(tpm, passphraseParams, key.VolumesAuth.Passphrase)
+			logger.Noticef("DEBUG: protectedKey: %v", protectedKey)
+			logger.Noticef("DEBUG: primaryKeyOut: %v", primaryKeyOut)
+			logger.Noticef("DEBUG: unlockKey: %v", unlockKey)
+			logger.Noticef("DEBUG: sbNewTPMPassphraseProtectedKey error: %v", err)
+		} else {
+			logger.Noticef("DEBUG: volume-auth not passed")
+			protectedKey, primaryKeyOut, unlockKey, err = sbNewTPMProtectedKey(tpm, creationParams)
+		}
 		if primaryKey == nil {
 			primaryKey = primaryKeyOut
 		}

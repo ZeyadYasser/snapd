@@ -32,6 +32,8 @@ type bootstrappedContainer struct {
 	devicePath           string
 	key                  DiskUnlockKey
 	finished             bool
+
+	authOptions *VolumesAuthOptions
 }
 
 func newLUKS2KeyDataWriterImpl(devicePath string, name string) (KeyDataWriter, error) {
@@ -74,6 +76,18 @@ func (bc *bootstrappedContainer) RemoveBootstrapKey() error {
 	}
 
 	return nil
+}
+
+func (bc *bootstrappedContainer) AddAuthOptions(opts *VolumesAuthOptions) error {
+	if opts == nil {
+		return fmt.Errorf("internal error: nil VolumesAuthOptions")
+	}
+	bc.authOptions = opts
+	return nil
+}
+
+func (bc *bootstrappedContainer) GetAuthOptions() *VolumesAuthOptions {
+	return bc.authOptions
 }
 
 func createBootstrappedContainerImpl(key DiskUnlockKey, devicePath string) BootstrappedContainer {

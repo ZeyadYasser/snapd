@@ -50,6 +50,7 @@ import (
 	"github.com/snapcore/snapd/overlord/snapstate"
 	"github.com/snapcore/snapd/overlord/state"
 	"github.com/snapcore/snapd/release"
+	"github.com/snapcore/snapd/secboot"
 	"github.com/snapcore/snapd/snap"
 	"github.com/snapcore/snapd/snap/channel"
 	"github.com/snapcore/snapd/snap/naming"
@@ -1942,7 +1943,7 @@ func InstallFinish(st *state.State, label string, onVolumes map[string]*gadget.V
 // InstallSetupStorageEncryption creates a change that will setup the
 // storage encryption for the install of the given label and
 // volumes.
-func InstallSetupStorageEncryption(st *state.State, label string, onVolumes map[string]*gadget.Volume) (*state.Change, error) {
+func InstallSetupStorageEncryption(st *state.State, label string, onVolumes map[string]*gadget.Volume, volumesAuth *secboot.VolumesAuthOptions) (*state.Change, error) {
 	if label == "" {
 		return nil, fmt.Errorf("cannot setup storage encryption with an empty system label")
 	}
@@ -1954,6 +1955,10 @@ func InstallSetupStorageEncryption(st *state.State, label string, onVolumes map[
 	setupStorageEncryptionTask := st.NewTask("install-setup-storage-encryption", fmt.Sprintf("Setup storage encryption for installing system %q", label))
 	setupStorageEncryptionTask.Set("system-label", label)
 	setupStorageEncryptionTask.Set("on-volumes", onVolumes)
+	if volumesAuth != nil {
+		// auth data must be in memory to leaking credentials in persistent state
+		st.Cache("volumes-auth", volumesAuth)
+	}
 	chg.AddTask(setupStorageEncryptionTask)
 
 	return chg, nil

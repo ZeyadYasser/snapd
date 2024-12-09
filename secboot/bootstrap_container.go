@@ -47,6 +47,10 @@ type BootstrappedContainer interface {
 	GetTokenWriter(slotName string) (KeyDataWriter, error)
 	// RemoveBootstrapKey removes the bootstrap key.
 	RemoveBootstrapKey() error
+	// TODO
+	AddAuthOptions(opts *VolumesAuthOptions) error
+	// TODO
+	GetAuthOptions() *VolumesAuthOptions
 }
 
 func createBootstrappedContainerMockImpl(key DiskUnlockKey, devicePath string) BootstrappedContainer {
@@ -59,6 +63,7 @@ type MockBootstrappedContainer struct {
 	BootstrapKeyRemoved bool
 	Slots               map[string][]byte
 	Tokens              map[string][]byte
+	AuthOptions         *VolumesAuthOptions
 }
 
 func CreateMockBootstrappedContainer() *MockBootstrappedContainer {
@@ -102,4 +107,13 @@ func (m *MockBootstrappedContainer) GetTokenWriter(slotName string) (KeyDataWrit
 func (l *MockBootstrappedContainer) RemoveBootstrapKey() error {
 	l.BootstrapKeyRemoved = true
 	return nil
+}
+
+func (l *MockBootstrappedContainer) AddAuthOptions(opts *VolumesAuthOptions) error {
+	l.AuthOptions = opts
+	return nil
+}
+
+func (l *MockBootstrappedContainer) GetAuthOptions() *VolumesAuthOptions {
+	return l.AuthOptions
 }

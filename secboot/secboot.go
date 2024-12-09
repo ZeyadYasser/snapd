@@ -26,6 +26,7 @@ package secboot
 
 import (
 	"errors"
+	"time"
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/bootloader"
@@ -76,6 +77,9 @@ type SealKeyRequest struct {
 	// The file to store the key data. If empty, the key data will
 	// be saved to the token.
 	KeyFile string
+
+	// TODO
+	VolumesAuth *VolumesAuthOptions
 }
 
 // ModelForSealing provides information about the model for use in the context
@@ -218,6 +222,22 @@ type UnlockResult struct {
 	// - UnlockedWithSealedKey
 	// - UnlockedWithKey
 	UnlockMethod UnlockMethod
+}
+
+type AuthMode string
+
+const (
+	AuthModeNone       AuthMode = "none"
+	AuthModePassphrase AuthMode = "passphrase"
+	// TODO: AuthModePIN AuthMode = "pin"
+)
+
+type VolumesAuthOptions struct {
+	Mode       AuthMode `json:"mode,omitempty"`
+	Passphrase string   `json:"passphrase,omitempty"`
+	// TODO: Add PIN option when secboot support lands
+	KDFType string        `json:"kdf-type,omitempty"`
+	KDFTime time.Duration `json:"kdf-time,omitempty"`
 }
 
 // EncryptedPartitionName returns the name/label used by an encrypted partition

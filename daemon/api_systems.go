@@ -119,6 +119,11 @@ var deviceManagerSystemAndGadgetAndEncryptionInfo = func(dm *devicestate.DeviceM
 	return dm.SystemAndGadgetAndEncryptionInfo(systemLabel)
 }
 
+func supportedStorageEncryptionFeatures() []client.StorageEncryptionFeature {
+	// TODO: do more checks if passphrase are actually supported by the system not just through snapd
+	return []client.StorageEncryptionFeature{client.StorageEncryptionFeaturePassphraseAuth}
+}
+
 func storageEncryption(encInfo *install.EncryptionSupportInfo) *client.StorageEncryption {
 	if encInfo.Disabled {
 		return &client.StorageEncryption{
@@ -128,6 +133,7 @@ func storageEncryption(encInfo *install.EncryptionSupportInfo) *client.StorageEn
 	storageEnc := &client.StorageEncryption{
 		StorageSafety: string(encInfo.StorageSafety),
 		Type:          string(encInfo.Type),
+		Features:      supportedStorageEncryptionFeatures(),
 	}
 	required := (encInfo.StorageSafety == asserts.StorageSafetyEncrypted)
 	switch {
@@ -322,7 +328,7 @@ func postSystemActionInstall(c *Command, systemLabel string, req *systemActionRe
 
 	switch req.Step {
 	case client.InstallStepSetupStorageEncryption:
-		chg, err := devicestateInstallSetupStorageEncryption(st, systemLabel, req.OnVolumes)
+		chg, err := devicestateInstallSetupStorageEncryption(st, systemLabel, req.OnVolumes, req.VolumesAuth)
 		if err != nil {
 			return BadRequest("cannot setup storage encryption for install from %q: %v", systemLabel, err)
 		}

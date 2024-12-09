@@ -629,7 +629,7 @@ func SaveStorageTraits(model gadget.Model, vols map[string]*gadget.Volume, encry
 	return nil
 }
 
-func EncryptPartitions(onVolumes map[string]*gadget.Volume, encryptionType secboot.EncryptionType, model *asserts.Model, gadgetRoot, kernelRoot string, perfTimings timings.Measurer) (*EncryptionSetupData, error) {
+func EncryptPartitions(onVolumes map[string]*gadget.Volume, encryptionType secboot.EncryptionType, volumesAuth *secboot.VolumesAuthOptions, model *asserts.Model, gadgetRoot, kernelRoot string, perfTimings timings.Measurer) (*EncryptionSetupData, error) {
 	setupData := &EncryptionSetupData{
 		parts: make(map[string]partEncryptionData),
 	}
@@ -672,6 +672,11 @@ func EncryptPartitions(onVolumes map[string]*gadget.Volume, encryptionType secbo
 				installKey:          secboot.CreateBootstrappedContainer(encryptionKey, device),
 				encryptedSectorSize: fsParams.SectorSize,
 				encryptionParams:    createEncryptionParams(encryptionType),
+			}
+			logger.Noticef("DEBUG: volumes-auth in EncryptionSetupData: %v", volumesAuth)
+			if volumesAuth != nil {
+				setupData.parts[volStruct.Name].installKey.AddAuthOptions(volumesAuth)
+				logger.Noticef("DEBUG: volumes-auth in EncryptionSetupData in BootstrappedContainer: %v", setupData.parts[volStruct.Name].installKey.GetAuthOptions())
 			}
 		}
 	}

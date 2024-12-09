@@ -5,9 +5,11 @@ go 1.18
 // maze.io/x/crypto/afis imported by github.com/snapcore/secboot/tpm2
 replace maze.io/x/crypto => github.com/snapcore/maze.io-x-crypto v0.0.0-20190131090603-9b94c9afe066
 
+replace github.com/snapcore/secboot => github.com/ZeyadYasser/secboot v0.0.0-20241205103244-56aea41e7900
+
 require (
 	github.com/bmatcuk/doublestar/v4 v4.6.1
-	github.com/canonical/go-efilib v1.3.1
+	github.com/canonical/go-efilib v1.4.1
 	github.com/canonical/go-sp800.90a-drbg v0.0.0-20210314144037-6eeb1040d6c3 // indirect
 	github.com/canonical/go-tpm2 v1.7.6
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf

@@ -56,6 +56,8 @@ var (
 
 func init() {
 	WithSecbootSupport = true
+	// TODO: set Argon2KDF implementation
+	// sb.SetArgon2KDF(sb.InProcessArgon2KDF)
 }
 
 type DiskUnlockKey sb.DiskUnlockKey

@@ -58,6 +58,7 @@ func runKeySealRequests(key secboot.BootstrappedContainer, useTokens bool) []sec
 			KeyName:               "ubuntu-data",
 			SlotName:              "default",
 			KeyFile:               keyFile,
+			VolumesAuth:           key.GetAuthOptions(),
 		},
 	}
 }

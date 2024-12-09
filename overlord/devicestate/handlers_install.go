@@ -950,6 +950,7 @@ func (m *DeviceManager) doInstallFinish(t *state.Task, _ *tomb.Tomb) error {
 			return fmt.Errorf("internal error: wrong data type under encryptionSetupDataKey")
 		}
 	}
+	logger.Noticef("DEBUG: encryptSetupData in install-finish step: %v", encryptSetupData)
 
 	st.Unlock()
 	systemAndSnaps, mntPtForType, unmount, err := m.loadAndMountSystemLabelSnaps(systemLabel)
@@ -1149,6 +1150,7 @@ func (m *DeviceManager) doInstallFinish(t *state.Task, _ *tomb.Tomb) error {
 	}
 
 	logger.Debugf("making the installed system runnable for system label %s", systemLabel)
+	logger.Noticef("DEBUG: trustedInstallObserver: %v", trustedInstallObserver)
 	if err := bootMakeRunnableStandalone(systemAndSnaps.Model, bootWith, trustedInstallObserver, st.Unlocker()); err != nil {
 		return err
 	}
@@ -1206,9 +1208,21 @@ func (m *DeviceManager) doInstallSetupStorageEncryption(t *state.Task, _ *tomb.T
 		return fmt.Errorf("encryption unavailable on this device: %v", whyStr)
 	}
 
+	var volumesAuth *secboot.VolumesAuthOptions
+	cached := st.Cached("volumes-auth")
+	if cached != nil {
+		logger.Debug("volumes-auth found")
+		var ok bool
+		volumesAuth, ok = cached.(*secboot.VolumesAuthOptions)
+		if !ok {
+			return fmt.Errorf("internal error: wrong data type under volumes-auth")
+		}
+		st.Cache("volumes-auth", nil)
+	}
+
 	// TODO:ICE: support secboot.EncryptionTypeLUKSWithICE in the API
 	encType := secboot.EncryptionTypeLUKS
-	encryptionSetupData, err := installEncryptPartitions(onVolumes, encType, systemAndSeeds.Model, mntPtForType[snap.TypeGadget], mntPtForType[snap.TypeKernel], perfTimings)
+	encryptionSetupData, err := installEncryptPartitions(onVolumes, encType, volumesAuth, systemAndSeeds.Model, mntPtForType[snap.TypeGadget], mntPtForType[snap.TypeKernel], perfTimings)
 	if err != nil {
 		return err
 	}

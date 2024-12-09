@@ -27,6 +27,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/snapcore/snapd/gadget"
+	"github.com/snapcore/snapd/secboot"
 	"github.com/snapcore/snapd/snap"
 )
 
@@ -155,9 +156,21 @@ const (
 	StorageEncryptionSupportDefective = "defective"
 )
 
+type StorageEncryptionFeature string
+
+const (
+	// passphrase authentication is supported
+	StorageEncryptionFeaturePassphraseAuth StorageEncryptionFeature = "passphrase-auth"
+	// PIN authentication is supported
+	// StorageEncryptionFeaturePINAuth StorageEncryptionFeature = "pin-auth"
+)
+
 type StorageEncryption struct {
 	// Support describes the level of hardware support available.
 	Support StorageEncryptionSupport `json:"support"`
+
+	// Features is a list of supported encryption features
+	Features []StorageEncryptionFeature `json:"features"`
 
 	// StorageSafety can have values of asserts.StorageSafety
 	StorageSafety string `json:"storage-safety,omitempty"`
@@ -241,6 +254,8 @@ type InstallSystemOptions struct {
 	// snaps and components, provide an empty OptionalInstallRequest with the
 	// All field set to false.
 	OptionalInstall *OptionalInstallRequest `json:"optional-install,omitempty"`
+	// TODO
+	VolumesAuth *secboot.VolumesAuthOptions `json:"volumes-auth,omitempty"`
 }
 
 type OptionalInstallRequest struct {
