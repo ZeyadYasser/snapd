@@ -264,6 +264,8 @@ func PrepareEncryptedSystemData(model *asserts.Model, installKeyForRole map[stri
 	// make note of the encryption keys
 	trustedInstallObserver.SetBootstrappedContainers(dataBootstrappedContainer, saveBootstrappedContainer)
 
+	// TODO: Attach volume authentication options to observer
+
 	if saveBootstrappedContainer != nil {
 		// TODO: use plainkey from secboot
 		saveKey, err := keys.NewEncryptionKey()
