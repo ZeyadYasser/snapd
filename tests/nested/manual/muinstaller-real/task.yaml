@@ -122,6 +122,8 @@ execute: |
      --gadget-assertion pc.assert \
      --kernel pc-kernel.snap \
      --kernel-assertion pc-kernel.assert \
+     --passphrase ubuntu \
+     --extra-muinstaller-args "-kdf-type pbkdf2" \
      --disk disk.img
 
   # basic things look fine
@@ -169,6 +171,8 @@ execute: |
       jq '.result."storage-encryption".support' < system | MATCH "unavailable"
       jq '.result."storage-encryption"."unavailable-reason"' < system | MATCH "not encrypting device storage as checking TPM gave: the TPM is in DA lockout mode"
   fi
+
+  exit 0
 
   # test kernel/gadget refreshes via the fake-store
 

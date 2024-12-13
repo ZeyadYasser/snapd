@@ -255,6 +255,7 @@ func PrepareEncryptedSystemData(model *asserts.Model, installKeyForRole map[stri
 
 	// make note of the encryption keys
 	trustedInstallObserver.SetBootstrappedContainers(dataBootstrappedContainer, saveBootstrappedContainer)
+	// TODO: add passphrase setup options here instead in BootstrappedContainers
 
 	if saveBootstrappedContainer != nil {
 		// TODO: use plainkey from secboot

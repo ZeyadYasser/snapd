@@ -14,6 +14,18 @@ environment:
   NESTED_ENABLE_TPM: true
   NESTED_ENABLE_SECURE_BOOT: true
 
+  # encrypted + passphrase auth (pbkdf2)
+  # TODO: add variant for argon2i* KDF_TYPEs
+  NESTED_ENABLE_TPM/passphrase_auth_pbkdf2: true
+  NESTED_ENABLE_SECURE_BOOT/passphrase_auth_pbkdf2: true
+  PASSPHRASE/passphrase_auth_pbkdf2: "ubuntu"
+  KDF_TYPE/passphrase_auth_pbkdf2: pbkdf2
+  KDF_TIME/passphrase_auth_pbkdf2: 2s
+  # TODO: test defaults
+  # NESTED_ENABLE_TPM/passphrase_auth_default: true
+  # NESTED_ENABLE_SECURE_BOOT/passphrase_auth_default: true
+  # PASSPHRASE/passphrase_auth_default: "ubuntu"
+
   # unencrypted case
   NESTED_ENABLE_TPM/plain: false
   NESTED_ENABLE_SECURE_BOOT/plain: false
@@ -43,6 +55,11 @@ environment:
   INSTALL_OPTIONAL_EXPECT_ALL/install_optional_all: true
 
 prepare: |
+  if ! os.query is-noble && [ -n "$PASSPHRASE" ]; then
+    echo "SKIPPING: only run passphrase support variant for core24"
+    exit 0
+  fi
+
   if [ "$TRUST_TEST_KEYS" = "false" ]; then
       echo "This test needs test keys to be trusted"
       exit
@@ -231,6 +248,15 @@ execute: |
     remote.push optional-install.json
     muinstaller_args="$muinstaller_args -optional ./optional-install.json"
   fi
+  if [ -n "$PASSPHRASE" ]; then
+    muinstaller_args="$muinstaller_args -passphrase $PASSPHRASE"
+    if [ -n "$KDF_TYPE" ]; then
+      muinstaller_args="$muinstaller_args -kdf-type $KDF_TYPE"
+    fi
+    if [ -n "$KDF_TIME" ]; then
+      muinstaller_args="$muinstaller_args -kdf-time $KDF_TIME"
+    fi
+  fi
 
   remote.exec "sudo muinstaller $muinstaller_args"
 
@@ -246,7 +272,7 @@ execute: |
   mv fake-disk.img "$NESTED_IMAGES_DIR/$IMAGE_NAME"
 
   # Start installed image
-  tests.nested create-vm core --keep-firmware-state
+  tests.nested create-vm core --keep-firmware-state --expect-passphrase "$PASSPHRASE"
 
   # things look fine
   remote.exec "cat /etc/os-release" | MATCH 'NAME="Ubuntu Core"'
