@@ -416,6 +416,10 @@ func readKeyData(key KeyDataLocation) (*sb.KeyData, *sb_tpm2.SealedKeyObject, sb
 	return nil, nil, nil, fmt.Errorf(`trying to load key data from %s:%s returned "%v", and from %s returned "%v"`, key.DevicePath, key.SlotName, tokenErr, key.KeyFile, fileErr)
 }
 
+func ReadTokenAndGetWriter(key KeyDataLocation) (*sb.KeyData, sb.KeyDataWriter, error) {
+	return key.readTokenAndGetWriter()
+}
+
 // ProvisionTPM provisions the default TPM and saves the lockout authorization
 // key to the specified file.
 func ProvisionTPM(mode TPMProvisionMode, lockoutAuthFile string) error {
