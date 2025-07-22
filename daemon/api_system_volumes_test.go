@@ -55,6 +55,10 @@ func (s *systemVolumesSuite) SetUpTest(c *C) {
 			"check-passphrase":  daemon.InterfaceOpenAccess{Interfaces: []string{"snap-fde-control"}},
 			"check-pin":         daemon.InterfaceOpenAccess{Interfaces: []string{"snap-fde-control"}},
 			"change-passphrase": daemon.InterfaceOpenAccess{Interfaces: []string{"snap-fde-control"}},
+			"reset-passphrase": daemon.InterfaceRootAccess{
+				Interfaces: []string{"snap-fde-control"},
+				Polkit:     "io.snapcraft.snapd.manage-fde",
+			},
 			"check-recovery-key": daemon.InterfaceRootAccess{
 				Interfaces: []string{"snap-fde-control", "firmware-updater-support"},
 				Polkit:     "io.snapcraft.snapd.manage-fde",

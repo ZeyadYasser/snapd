@@ -42,7 +42,7 @@ var systemVolumesCmd = &Command{
 	POST: postSystemVolumesAction,
 	Actions: []string{
 		"generate-recovery-key", "check-recovery-key", "replace-recovery-key",
-		"check-passphrase", "check-pin", "change-passphrase"},
+		"check-passphrase", "check-pin", "change-passphrase", "reset-passphrase"},
 	// anyone can enumerate key slots.
 	ReadAccess: interfaceOpenAccess{Interfaces: []string{"snap-fde-control"}},
 	WriteAccess: byActionAccess{
@@ -53,6 +53,11 @@ var systemVolumesCmd = &Command{
 			// anyone can change passphrase given they know the old passphrase
 			// TODO:FDEM: rate limiting is needed to avoid DA lockout.
 			"change-passphrase": interfaceOpenAccess{Interfaces: []string{"snap-fde-control"}},
+			// only root and admins (authenticated via Polkit) can do passphrase reset
+			"reset-passphrase": interfaceRootAccess{
+				Interfaces: []string{"snap-fde-control"},
+				Polkit:     polkitActionManageFDE,
+			},
 			// only root and admins (authenticated via Polkit) can do recovery key
 			// related actions.
 			"check-recovery-key": interfaceRootAccess{
@@ -78,6 +83,7 @@ var systemVolumesCmd = &Command{
 
 var fdeReplaceRecoveryKeyChangeKind = swfeats.RegisterChangeKind("fde-replace-recovery-key")
 var fdeChangePassphraseChangeKind = swfeats.RegisterChangeKind("fde-change-passphrase")
+var fdeResetPassphraseChangeKind = swfeats.RegisterChangeKind("fde-reset-passphrase")
 
 var (
 	fdestateReplaceRecoveryKey = fdestate.ReplaceRecoveryKey
@@ -237,6 +243,8 @@ func postSystemVolumesActionJSON(c *Command, r *http.Request) Response {
 		return postSystemVolumesCheckPIN(&req)
 	case "change-passphrase":
 		return postSystemVolumesActionChangePassphrase(c, &req)
+	case "reset-passphrase":
+		return postSystemVolumesActionResetPassphrase(c, &req)
 	default:
 		return BadRequest("unsupported system volumes action %q", req.Action)
 	}
@@ -318,7 +326,6 @@ func postSystemVolumesCheckPIN(req *systemVolumesActionRequest) Response {
 }
 
 func postSystemVolumesActionChangePassphrase(c *Command, req *systemVolumesActionRequest) Response {
-	// TODO:FDEM: allow root to reset passphrase without providing old passphrase.
 	if req.OldPassphrase == "" {
 		return BadRequest("system volume action requires old-passphrase to be provided")
 	}
@@ -336,6 +343,32 @@ func postSystemVolumesActionChangePassphrase(c *Command, req *systemVolumesActio
 	}
 
 	chg := newChange(st, fdeChangePassphraseChangeKind, "Change passphrase", []*state.TaskSet{ts}, nil)
+
+	st.EnsureBefore(0)
+
+	return AsyncResponse(nil, chg.ID())
+}
+
+func postSystemVolumesActionResetPassphrase(c *Command, req *systemVolumesActionRequest) Response {
+	if req.NewPassphrase == "" {
+		return BadRequest("system volume action requires new-passphrase to be provided")
+	}
+
+	st := c.d.overlord.State()
+	st.Lock()
+	defer st.Unlock()
+
+	volumesAuth := &device.VolumesAuthOptions{
+		Mode:       device.AuthModePassphrase,
+		Passphrase: req.NewPassphrase,
+	}
+
+	ts, err := fdestate.ReplaceProtectedKey(st, volumesAuth, req.Keyslots)
+	if err != nil {
+		return errToResponse(err, nil, BadRequest, "cannot reset passphrase: %v")
+	}
+
+	chg := newChange(st, fdeChangePassphraseChangeKind, "Reset passphrase", []*state.TaskSet{ts}, nil)
 
 	st.EnsureBefore(0)
 
