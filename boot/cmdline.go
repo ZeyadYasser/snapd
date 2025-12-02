@@ -22,6 +22,7 @@ package boot
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/bootloader"
@@ -29,6 +30,7 @@ import (
 	"github.com/snapcore/snapd/gadget"
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/osutil/kcmdline"
+	"github.com/snapcore/snapd/overlord/state"
 	"github.com/snapcore/snapd/strutil"
 )
 
@@ -398,4 +400,96 @@ func kernelCommandLinesForResealWithFallback(modeenv *Modeenv) (cmdlines []strin
 		return nil, err
 	}
 	return []string{cmdline}, nil
+}
+
+type ExtraSnapdKernelCmdlineArg string
+
+const (
+	ExtraSnapdKernelCmdlineArgXKB ExtraSnapdKernelCmdlineArg = "xkb"
+)
+
+func (arg ExtraSnapdKernelCmdlineArg) validate(value string) error {
+	switch arg {
+	case ExtraSnapdKernelCmdlineArgXKB:
+		// TODO:FDEM: add regex validation for arg values?
+	default:
+		return fmt.Errorf("internal error: unexpected ExtraSnapdKernelCmdlineArg: %q", arg)
+	}
+	return nil
+}
+
+const extraSnapdKernelCmdlineArgsKey string = "extra-snapd-kcmdline-args"
+
+var extraSnapdKernelCommandLineArgChangedHandler func(st *state.State, name ExtraSnapdKernelCmdlineArg, value string)
+
+func InitExtraSnapdKernelCommandLineArgChangedHandler(handler func(st *state.State, name ExtraSnapdKernelCmdlineArg, value string)) {
+	if extraSnapdKernelCommandLineArgChangedHandler != nil {
+		panic("internal error: extraSnapdKernelCommandLineArgChangedHandler can only be initialized once")
+	}
+	extraSnapdKernelCommandLineArgChangedHandler = handler
+}
+
+func SetExtraSnapdKernelCommandLineArg(st *state.State, name ExtraSnapdKernelCmdlineArg, value string) error {
+	if extraSnapdKernelCommandLineArgChangedHandler == nil {
+		panic("internal error: extraSnapdKernelCommandLineArgChangedHandler cannot be unset")
+	}
+
+	if err := name.validate(value); err != nil {
+		return err
+	}
+
+	var args map[ExtraSnapdKernelCmdlineArg]string
+	if err := st.Get(extraSnapdKernelCmdlineArgsKey, &args); err != nil && !errors.Is(err, state.ErrNoState) {
+		return err
+	}
+	oldValue := args[name]
+	if value == oldValue {
+		// no-op
+		return nil
+	}
+
+	if args == nil {
+		args = make(map[ExtraSnapdKernelCmdlineArg]string, 1)
+	}
+
+	if value == "" {
+		delete(args, name)
+	} else {
+		args[name] = value
+	}
+	st.Set(extraSnapdKernelCmdlineArgsKey, args)
+
+	// Value changed, Notify registered handler.
+	extraSnapdKernelCommandLineArgChangedHandler(st, name, value)
+	return nil
+}
+
+func GetExtraSnapdKernelCommandLineArg(st *state.State, name ExtraSnapdKernelCmdlineArg) (string, error) {
+	var args map[ExtraSnapdKernelCmdlineArg]string
+	err := st.Get(extraSnapdKernelCmdlineArgsKey, &args)
+	if errors.Is(err, state.ErrNoState) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return args[name], nil
+}
+
+func BuildExtraSnapdKernelCommandLineArgs(st *state.State) (string, error) {
+	var registeredArgs map[ExtraSnapdKernelCmdlineArg]string
+	if err := st.Get(extraSnapdKernelCmdlineArgsKey, &registeredArgs); err != nil && !errors.Is(err, state.ErrNoState) {
+		return "", err
+	}
+	if len(registeredArgs) == 0 {
+		return "", nil
+	}
+
+	args := make([]string, 0, len(registeredArgs))
+	for name, value := range registeredArgs {
+		args = append(args, fmt.Sprintf("snapd.%s=%q", name, value))
+	}
+	sort.Strings(args)
+	return strutil.JoinNonEmpty(args, " "), nil
 }

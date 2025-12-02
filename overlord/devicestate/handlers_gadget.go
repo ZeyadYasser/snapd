@@ -279,7 +279,8 @@ func kernelCommandLineAppendArgs(tsk *state.Task, tr *config.Transaction,
 }
 
 func buildAppendedKernelCommandLine(t *state.Task, gd *gadget.GadgetData, deviceCtx snapstate.DeviceContext) (string, error) {
-	tr := config.NewTransaction(t.State())
+	st := t.State()
+	tr := config.NewTransaction(st)
 	rawCmdlineAppend, err := kernelCommandLineAppendArgs(t, tr, "cmdline-append")
 	if err != nil {
 		return "", err
@@ -306,6 +307,13 @@ func buildAppendedKernelCommandLine(t *state.Task, gd *gadget.GadgetData, device
 	}
 
 	logger.Debugf("appended kernel command line part is %q", cmdlineAppend)
+
+	extraSnapdCmdline, err := boot.BuildExtraSnapdKernelCommandLineArgs(st)
+	if err != nil {
+		return "", err
+	}
+	cmdlineAppend = strutil.JoinNonEmpty(
+		[]string{extraSnapdCmdline, cmdlineAppend}, " ")
 
 	return cmdlineAppend, nil
 }

@@ -95,6 +95,8 @@ func init() {
 	swfeats.RegisterEnsure("DeviceManager", "ensureTriedRecoverySystem")
 	swfeats.RegisterEnsure("DeviceManager", "ensurePostFactoryReset")
 	swfeats.RegisterEnsure("DeviceManager", "ensureExpiredUsersRemoved")
+
+	boot.InitExtraSnapdKernelCommandLineArgChangedHandler(extraSnapdKernelCommandLineArgChangedHandler)
 }
 
 // EarlyConfig is a hook set by configstate that can process early configuration
@@ -361,7 +363,21 @@ func (m *DeviceManager) StartUp() error {
 
 	// TODO: setup proper timings measurements for this
 
-	return EarlyConfig(m.state, m.earlyPreloadGadget)
+	if err := EarlyConfig(m.state, m.earlyPreloadGadget); err != nil {
+		return err
+	}
+
+	// TODO:FDEM: remove this ugly hack
+	go func() {
+		for {
+			if err := m.maybeUpdateEarlyBootLocaleConfig(); err != nil {
+				logger.Noticef("DEBUG: goroutine error: %v", err)
+			}
+			time.Sleep(10 * time.Second)
+		}
+	}()
+
+	return nil
 }
 
 func (m *DeviceManager) shouldMountUbuntuSave(dev snap.Device) bool {
@@ -1814,6 +1830,52 @@ func (m *DeviceManager) ensureExpiredUsersRemoved() error {
 		}
 	}
 	return nil
+}
+
+// TODO:FDEM: this should likely be run from a goroutine that listens
+// for system locale changes (e.g. through inotify).
+func (m *DeviceManager) maybeUpdateEarlyBootLocaleConfig() error {
+	m.state.Lock()
+	defer m.state.Unlock()
+
+	var seeded bool
+	err := m.state.Get("seeded", &seeded)
+	if err != nil && !errors.Is(err, state.ErrNoState) {
+		return err
+	}
+	if !seeded {
+		return nil
+	}
+
+	config, err := osutil.SystemLocaleXKBConfig()
+	if err != nil {
+		return err
+	}
+
+	if err := boot.SetExtraSnapdKernelCommandLineArg(m.state, boot.ExtraSnapdKernelCmdlineArgXKB, config.KernelCommandLineArgValue()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func extraSnapdKernelCommandLineArgChangedHandler(st *state.State, name boot.ExtraSnapdKernelCmdlineArg, value string) {
+	var seeded bool
+	err := st.Get("seeded", &seeded)
+	if err != nil && !errors.Is(err, state.ErrNoState) {
+		logger.Noticef("internal error: cannot obtain seeding status: %v", err)
+		return
+	}
+	if !seeded {
+		return
+	}
+
+	t := st.NewTask("update-managed-boot-config", "Set early-boot locale xkb configurations in kernel cmdline")
+	t.Set("no-restart", true)
+
+	chg := st.NewChange("update-locale-xkb-config", "Set early-boot locale xkb configurations in kernel cmdline")
+	chg.AddTask(t)
+
+	st.EnsureBefore(0)
 }
 
 type ensureError struct {
