@@ -25,6 +25,7 @@ import (
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/client"
 	"github.com/snapcore/snapd/cmd/snaplock/runinhibit"
 	"github.com/snapcore/snapd/dirs"
@@ -91,7 +92,7 @@ type managerBackend interface {
 	StartServices(svcs []*snap.AppInfo, disabledSvcs *wrappers.DisabledServices, meter progress.Meter, tm timings.Measurer) error
 	StopServices(svcs []*snap.AppInfo, reason snap.ServiceStopReason, meter progress.Meter, tm timings.Measurer) error
 	QueryDisabledServices(info *snap.Info, pb progress.Meter) (*wrappers.DisabledServices, error)
-	MaybeSetNextBoot(info *snap.Info, dev snap.Device, isUndo bool) (boot.RebootInfo, error)
+	MaybeSetNextBoot(info *snap.Info, dev snap.Device, isUndo bool, from reseal.ResealCalledFrom) (boot.RebootInfo, error)
 
 	// the undoers for install
 	UndoSetupSnap(s snap.PlaceInfo, typ snap.Type, installRecord *backend.InstallRecord, dev snap.Device, meter progress.Meter) error

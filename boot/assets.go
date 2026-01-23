@@ -31,6 +31,7 @@ import (
 	_ "golang.org/x/crypto/sha3"
 
 	"github.com/snapcore/snapd/asserts"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget"
@@ -797,7 +798,7 @@ func (o *TrustedAssetsUpdateObserver) observeRollback(bl bootloader.Bootloader, 
 }
 
 // BeforeWrite is called when the update process has been staged for execution.
-func (o *TrustedAssetsUpdateObserver) BeforeWrite() error {
+func (o *TrustedAssetsUpdateObserver) BeforeWrite(from reseal.ResealCalledFrom) error {
 	if o.modeenv == nil {
 		// modeenv wasn't even loaded yet, meaning none of the trusted
 		// boot assets was updated
@@ -805,7 +806,7 @@ func (o *TrustedAssetsUpdateObserver) BeforeWrite() error {
 	}
 	// no model changed => ignore FDE hooks
 	opts := ResealKeyToModeenvOptions{ExpectReseal: true, IgnoreFDEHooks: true}
-	if err := resealKeyToModeenv(dirs.GlobalRootDir, o.modeenv, opts, nil); err != nil {
+	if err := resealKeyToModeenv(dirs.GlobalRootDir, o.modeenv, opts, nil, from); err != nil {
 		return err
 	}
 	return nil
@@ -856,7 +857,7 @@ func (o *TrustedAssetsUpdateObserver) canceledUpdate(recovery bool) {
 
 // Canceled is called when the update has been canceled, or if changes
 // were written and the update has been reverted.
-func (o *TrustedAssetsUpdateObserver) Canceled() error {
+func (o *TrustedAssetsUpdateObserver) Canceled(from reseal.ResealCalledFrom) error {
 	if o.modeenv == nil {
 		// modeenv wasn't even loaded yet, meaning none of the boot
 		// assets was updated
@@ -872,7 +873,7 @@ func (o *TrustedAssetsUpdateObserver) Canceled() error {
 
 	// no model changed => ignore FDE hooks
 	opts := ResealKeyToModeenvOptions{ExpectReseal: true, IgnoreFDEHooks: true}
-	if err := resealKeyToModeenv(dirs.GlobalRootDir, o.modeenv, opts, nil); err != nil {
+	if err := resealKeyToModeenv(dirs.GlobalRootDir, o.modeenv, opts, nil, from); err != nil {
 		return fmt.Errorf("while canceling gadget update: %v", err)
 	}
 	return nil

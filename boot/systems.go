@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/snap"
@@ -42,17 +43,17 @@ func dropFromRecoverySystemsList(systemsList []string, systemLabel string) (newL
 // the try model in the modeenv state file, then reseals and clears related
 // bootloader variables. An empty system label can be passed when the boot
 // variables state is inconsistent.
-func ClearTryRecoverySystem(dev snap.Device, systemLabel string) error {
+func ClearTryRecoverySystem(dev snap.Device, systemLabel string, from reseal.ResealCalledFrom) error {
 	if !dev.HasModeenv() {
 		return fmt.Errorf("internal error: recovery systems can only be used on UC20+")
 	}
 	modeenvLock()
 	defer modeenvUnlock()
 
-	return clearTryRecoverySystem(dev, systemLabel)
+	return clearTryRecoverySystem(dev, systemLabel, from)
 }
 
-func clearTryRecoverySystem(dev snap.Device, systemLabel string) error {
+func clearTryRecoverySystem(dev snap.Device, systemLabel string, from reseal.ResealCalledFrom) error {
 	m, err := loadModeenv()
 	if err != nil {
 		return err
@@ -98,7 +99,7 @@ func clearTryRecoverySystem(dev snap.Device, systemLabel string) error {
 	// FDE hooks keys. We need to make sure those are also
 	// resealed.
 	resealOpts := ResealKeyToModeenvOptions{ExpectReseal: true, IgnoreFDEHooks: false}
-	resealErr := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil)
+	resealErr := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil, from)
 
 	if resealErr != nil {
 		return resealErr
@@ -112,7 +113,7 @@ func clearTryRecoverySystem(dev snap.Device, systemLabel string) error {
 // optionally sets a try model, if the device model is different from the
 // current one, which typically can happen during a remodel. Once done, the
 // caller should request switching to the given recovery system.
-func SetTryRecoverySystem(dev snap.Device, systemLabel string) (err error) {
+func SetTryRecoverySystem(dev snap.Device, systemLabel string, from reseal.ResealCalledFrom) (err error) {
 	if !dev.HasModeenv() {
 		return fmt.Errorf("internal error: recovery systems can only be used on UC20+")
 	}
@@ -160,7 +161,7 @@ func SetTryRecoverySystem(dev snap.Device, systemLabel string) (err error) {
 		if err == nil {
 			return
 		}
-		if cleanupErr := clearTryRecoverySystem(dev, systemLabel); cleanupErr != nil {
+		if cleanupErr := clearTryRecoverySystem(dev, systemLabel, from); cleanupErr != nil {
 			err = fmt.Errorf("%v (cleanup failed: %v)", err, cleanupErr)
 		}
 	}()
@@ -180,7 +181,7 @@ func SetTryRecoverySystem(dev snap.Device, systemLabel string) (err error) {
 	// tried system, data will still be inaccessible and the system will be
 	// considered as nonoperational
 	resealOpts := ResealKeyToModeenvOptions{ExpectReseal: true, IgnoreFDEHooks: false}
-	return resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil)
+	return resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil, from)
 }
 
 type errInconsistentRecoverySystemState struct {
@@ -392,7 +393,7 @@ func InspectTryRecoverySystemOutcome(dev snap.Device) (outcome TryRecoverySystem
 // provided list of tried systems should contain the system in question. If the
 // system uses encryption, the keys will updated state. If resealing fails, an
 // attempt to restore the previous state is made
-func PromoteTriedRecoverySystem(dev snap.Device, systemLabel string, triedSystems []string) (err error) {
+func PromoteTriedRecoverySystem(dev snap.Device, systemLabel string, triedSystems []string, from reseal.ResealCalledFrom) (err error) {
 	if !dev.HasModeenv() {
 		return fmt.Errorf("internal error: recovery systems can only be used on UC20+")
 	}
@@ -424,8 +425,8 @@ func PromoteTriedRecoverySystem(dev snap.Device, systemLabel string, triedSystem
 	}
 
 	resealOpts := ResealKeyToModeenvOptions{ExpectReseal: true}
-	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil); err != nil {
-		if cleanupErr := dropRecoverySystem(dev, systemLabel); cleanupErr != nil {
+	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil, from); err != nil {
+		if cleanupErr := dropRecoverySystem(dev, systemLabel, from); cleanupErr != nil {
 			err = fmt.Errorf("%v (cleanup failed: %v)", err, cleanupErr)
 		}
 		return err
@@ -436,16 +437,16 @@ func PromoteTriedRecoverySystem(dev snap.Device, systemLabel string, triedSystem
 // DropRecoverySystem drops a provided system from the list of good and current
 // recovery systems, updates the modeenv and reseals the keys a needed. Note,
 // this call *DOES NOT* clear the boot environment variables.
-func DropRecoverySystem(dev snap.Device, systemLabel string) error {
+func DropRecoverySystem(dev snap.Device, systemLabel string, from reseal.ResealCalledFrom) error {
 	if !dev.HasModeenv() {
 		return fmt.Errorf("internal error: recovery systems can only be used on UC20+")
 	}
 	modeenvLock()
 	defer modeenvUnlock()
-	return dropRecoverySystem(dev, systemLabel)
+	return dropRecoverySystem(dev, systemLabel, from)
 }
 
-func dropRecoverySystem(dev snap.Device, systemLabel string) error {
+func dropRecoverySystem(dev snap.Device, systemLabel string, from reseal.ResealCalledFrom) error {
 	m, err := loadModeenv()
 	if err != nil {
 		return err
@@ -467,7 +468,7 @@ func dropRecoverySystem(dev snap.Device, systemLabel string) error {
 	}
 
 	resealOpts := ResealKeyToModeenvOptions{ExpectReseal: true}
-	return resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil)
+	return resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil, from)
 }
 
 // MarkRecoveryCapableSystem records a given system as one that we can recover

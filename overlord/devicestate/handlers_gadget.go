@@ -28,6 +28,7 @@ import (
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget"
 	"github.com/snapcore/snapd/logger"
@@ -203,7 +204,7 @@ func (m *DeviceManager) doUpdateGadgetAssets(t *state.Task, _ *tomb.Tomb) error 
 		// attempt to modify modeenv inside, which implicitly is
 		// guarded by the state lock; on top of that we do not expect
 		// the update to be moving large amounts of data
-		if err := gadgetUpdate(model, *currentData, *updateData, snapRollbackDir, updatePolicy, updateObserver); err != nil {
+		if err := gadgetUpdate(model, *currentData, *updateData, snapRollbackDir, updatePolicy, updateObserver, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 			return err
 		}
 		if updateObserver == nil {
@@ -242,7 +243,7 @@ func fromSystemOption(t *state.Task) bool {
 	return false
 }
 
-func (m *DeviceManager) updateGadgetCommandLine(t *state.Task, st *state.State, useCurrentGadget bool) (updated bool, err error) {
+func (m *DeviceManager) updateGadgetCommandLine(t *state.Task, st *state.State, useCurrentGadget bool, from reseal.ResealCalledFrom) (updated bool, err error) {
 	logger.Debugf("updating kernel command line")
 	devCtx, err := DeviceCtx(st, t, nil)
 	if err != nil {
@@ -279,7 +280,7 @@ func (m *DeviceManager) updateGadgetCommandLine(t *state.Task, st *state.State, 
 		return false, err
 	}
 
-	updated, err = boot.UpdateCommandLineForGadgetComponent(devCtx, gadgetData.RootDir, cmdlineAppend)
+	updated, err = boot.UpdateCommandLineForGadgetComponent(devCtx, gadgetData.RootDir, cmdlineAppend, from)
 	if err != nil {
 		return false, fmt.Errorf("cannot update kernel command line from gadget: %v", err)
 	}
@@ -319,7 +320,7 @@ func (m *DeviceManager) doUpdateGadgetCommandLine(t *state.Task, _ *tomb.Tomb) e
 	// We use the current gadget kernel command line if the change comes
 	// from setting a system option.
 	useCurrentGadget := isSysOption
-	updated, err := m.updateGadgetCommandLine(t, st, useCurrentGadget)
+	updated, err := m.updateGadgetCommandLine(t, st, useCurrentGadget, reseal.ResealCalledFromTask(t.Kind()))
 	if err != nil {
 		return err
 	}
@@ -371,7 +372,7 @@ func (m *DeviceManager) undoUpdateGadgetCommandLine(t *state.Task, _ *tomb.Tomb)
 	}
 
 	const isUndo = true
-	updated, err := m.updateGadgetCommandLine(t, st, isUndo)
+	updated, err := m.updateGadgetCommandLine(t, st, isUndo, reseal.ResealCalledFromTask(t.Kind()))
 	if err != nil {
 		return err
 	}

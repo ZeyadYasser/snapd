@@ -913,6 +913,9 @@ func Manager(st *state.State, runner *state.TaskRunner) (*SnapManager, error) {
 	runner.AddBlocked(m.otherPrereqRunning)
 	runner.AddBlocked(affectsRunningHooks)
 
+	// block resealing tasks from running concurrently
+	runner.AddBlocked(resealingTaskRunning)
+
 	RegisterAffectedSnapsByKind("conditional-auto-refresh", conditionalAutoRefreshAffectedSnaps)
 
 	return m, nil

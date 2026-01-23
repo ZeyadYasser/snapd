@@ -25,6 +25,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/osutil"
 	"github.com/snapcore/snapd/overlord/snapstate/backend"
@@ -748,7 +749,7 @@ func (m *SnapManager) doPrepareKernelModulesComponents(t *state.Task, _ *tomb.To
 			return err
 		}
 		isUndo := false
-		rebootInfo, err := m.backend.MaybeSetNextBoot(newInfo, deviceCtx, isUndo)
+		rebootInfo, err := m.backend.MaybeSetNextBoot(newInfo, deviceCtx, isUndo, reseal.ResealCalledFromTask(t.Kind()))
 		if err != nil {
 			return err
 		}

@@ -26,6 +26,7 @@ import (
 	"gopkg.in/tomb.v2"
 
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget/device"
 	"github.com/snapcore/snapd/logger"
@@ -321,7 +322,7 @@ func completeEFISecurebootDBUpdateChange(chg *state.Change) error {
 }
 
 // postUpdateReseal performs a reseal after a Secureboot Key Database update.
-func postUpdateReseal(mgr *FDEManager, unlocker boot.Unlocker, method device.SealingMethod) error {
+func postUpdateReseal(mgr *FDEManager, unlocker boot.Unlocker, method device.SealingMethod, from reseal.ResealCalledFrom) error {
 	return boot.WithBootChains(func(bc boot.BootChains) error {
 		logger.Debugf("attempting post Secureboot Key Database reseal")
 
@@ -332,7 +333,7 @@ func postUpdateReseal(mgr *FDEManager, unlocker boot.Unlocker, method device.Sea
 				RevokeOldKeys: true,
 			},
 		}
-		return mgr.resealKeyForBootChains(unlocker, method, dirs.GlobalRootDir, params)
+		return mgr.resealKeyForBootChains(unlocker, method, dirs.GlobalRootDir, params, from)
 	}, method)
 }
 
@@ -380,6 +381,7 @@ func (m *FDEManager) doEFISecurebootDBUpdatePrepare(t *state.Task, tomb *tomb.To
 					unlocker:   st.Unlocker(),
 				},
 				updateData.Method, dirs.GlobalRootDir, params, updateData.Payload,
+				reseal.ResealCalledFromTask(t.Kind()),
 			)
 		}, updateData.Method)
 	}()
@@ -436,7 +438,7 @@ func (m *FDEManager) undoEFISecurebootDBUpdatePrepare(t *state.Task, tomb *tomb.
 		// state and continue the undo sequence
 
 		mgr := fdeMgr(st)
-		err = postUpdateReseal(mgr, st.Unlocker(), updateData.Method)
+		err = postUpdateReseal(mgr, st.Unlocker(), updateData.Method, reseal.ResealCalledFromTask(t.Kind()))
 		if err != nil {
 			t.Logf("cannot complete post update reseal in undo: %v", err)
 			op.SetFailed(
@@ -501,7 +503,7 @@ func (m *FDEManager) doEFISecurebootDBUpdate(t *state.Task, tomb *tomb.Tomb) err
 	}
 
 	mgr := fdeMgr(st)
-	err = postUpdateReseal(mgr, st.Unlocker(), updateData.Method)
+	err = postUpdateReseal(mgr, st.Unlocker(), updateData.Method, reseal.ResealCalledFromTask(t.Kind()))
 	if err != nil {
 		t.Errorf("cannot complete post update reseal: %v", err)
 	}

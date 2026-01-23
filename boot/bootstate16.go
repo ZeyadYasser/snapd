@@ -22,6 +22,7 @@ package boot
 import (
 	"fmt"
 
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/snap"
 )
@@ -114,7 +115,7 @@ func newBootStateUpdate16(u bootStateUpdate, names ...string) (*bootStateUpdate1
 	return &bootStateUpdate16{bl: bl, env: m, toCommit: make(map[string]string)}, nil
 }
 
-func (u16 *bootStateUpdate16) commit(markedSuccessful bool) error {
+func (u16 *bootStateUpdate16) commit(markedSuccessful bool, from reseal.ResealCalledFrom) error {
 	if len(u16.toCommit) == 0 {
 		// nothing to do
 		return nil

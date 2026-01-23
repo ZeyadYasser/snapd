@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/cmd/snaplock/runinhibit"
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/osutil"
@@ -155,13 +156,13 @@ func updateCurrentSymlinks(info *snap.Info) (revert func(), e error) {
 // MaybeSetNextBoot configures the system for a reboot if necesssary because
 // of a snap refresh. isUndo must be set when we are installing the previous
 // snap while performing a revert of the latest one that was installed
-func (b Backend) MaybeSetNextBoot(info *snap.Info, dev snap.Device, isUndo bool) (boot.RebootInfo, error) {
+func (b Backend) MaybeSetNextBoot(info *snap.Info, dev snap.Device, isUndo bool, from reseal.ResealCalledFrom) (boot.RebootInfo, error) {
 	if b.preseed {
 		return boot.RebootInfo{}, nil
 	}
 
 	bootCtx := boot.NextBootContext{BootWithoutTry: isUndo}
-	return boot.Participant(info, info.Type(), dev).SetNextBoot(bootCtx)
+	return boot.Participant(info, info.Type(), dev).SetNextBoot(bootCtx, from)
 }
 
 // LinkSnap makes the snap available by generating wrappers and setting the current symlinks.

@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/snapcore/snapd/asserts"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget/device"
 	"github.com/snapcore/snapd/gadget/quantity"
@@ -120,10 +121,10 @@ type ContentUpdateObserver interface {
 	// BeforeWrite is called when the backups of content that will get
 	// modified during the update are complete and update is ready to be
 	// applied.
-	BeforeWrite() error
+	BeforeWrite(from reseal.ResealCalledFrom) error
 	// Canceled is called when the update has been canceled, or if changes
 	// were written and the update has been reverted.
-	Canceled() error
+	Canceled(from reseal.ResealCalledFrom) error
 }
 
 // searchVolumeWithTraitsAndMatchParts searches for a disk matching the given
@@ -1343,7 +1344,7 @@ func validateVolumesMatch(old, new map[string]*Volume) error {
 // kernel (rule 1)
 // d. After step (c) is completed the kernel refresh will now also work (no more
 // violation of rule 1)
-func Update(model Model, old, new GadgetData, rollbackDirPath string, updatePolicy UpdatePolicyFunc, observer ContentUpdateObserver) error {
+func Update(model Model, old, new GadgetData, rollbackDirPath string, updatePolicy UpdatePolicyFunc, observer ContentUpdateObserver, from reseal.ResealCalledFrom) error {
 	// The gadget can only match if they have identical volumes assigned for the
 	// (currently) matching device
 	oldVolumes, _, err := VolumesForCurrentDevice(old.Info)
@@ -1514,7 +1515,7 @@ func Update(model Model, old, new GadgetData, rollbackDirPath string, updatePoli
 	}
 
 	// apply all updates at once
-	if err := applyUpdates(structureLocations, new, allUpdates, rollbackDirPath, observer); err != nil {
+	if err := applyUpdates(structureLocations, new, allUpdates, rollbackDirPath, observer, from); err != nil {
 		return err
 	}
 
@@ -1783,7 +1784,7 @@ func updateLocationForStructure(structureLocations map[string]map[int]StructureL
 	}
 }
 
-func applyUpdates(structureLocations map[string]map[int]StructureLocation, new GadgetData, updates []updatePair, rollbackDir string, observer ContentUpdateObserver) error {
+func applyUpdates(structureLocations map[string]map[int]StructureLocation, new GadgetData, updates []updatePair, rollbackDir string, observer ContentUpdateObserver, from reseal.ResealCalledFrom) error {
 	updaters := make([]Updater, len(updates))
 
 	for i, one := range updates {
@@ -1807,14 +1808,14 @@ func applyUpdates(structureLocations map[string]map[int]StructureLocation, new G
 	}
 	if backupErr != nil {
 		if observer != nil {
-			if err := observer.Canceled(); err != nil {
+			if err := observer.Canceled(from); err != nil {
 				logger.Noticef("cannot observe canceled prepare update: %v", err)
 			}
 		}
 		return backupErr
 	}
 	if observer != nil {
-		if err := observer.BeforeWrite(); err != nil {
+		if err := observer.BeforeWrite(from); err != nil {
 			return fmt.Errorf("cannot observe prepared update: %v", err)
 		}
 	}
@@ -1857,7 +1858,7 @@ func applyUpdates(structureLocations map[string]map[int]StructureLocation, new G
 	}
 
 	if observer != nil {
-		if err := observer.Canceled(); err != nil {
+		if err := observer.Canceled(from); err != nil {
 			logger.Noticef("cannot observe canceled update: %v", err)
 		}
 	}

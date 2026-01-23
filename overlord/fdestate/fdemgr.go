@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget/device"
 	"github.com/snapcore/snapd/logger"
@@ -58,6 +59,15 @@ var (
 	secbootListContainerRecoveryKeyNames = secboot.ListContainerRecoveryKeyNames
 	secbootListContainerUnlockKeyNames   = secboot.ListContainerUnlockKeyNames
 )
+
+func init() {
+	snapstate.RegisterResealingTaskKind("efi-secureboot-db-update")
+	snapstate.RegisterResealingTaskKind("fde-add-recovery-keys")
+	snapstate.RegisterResealingTaskKind("fde-remove-keys")
+	snapstate.RegisterResealingTaskKind("fde-rename-keys")
+	snapstate.RegisterResealingTaskKind("fde-change-keys")
+	snapstate.RegisterResealingTaskKind("fde-add-platform-keys")
+}
 
 var ErrNotInitialized = errors.New("fde state was not initialized")
 
@@ -140,17 +150,6 @@ func Manager(st *state.State, runner *state.TaskRunner) (*FDEManager, error) {
 	runner.AddHandler("fde-rename-keys", m.doRenameKeys, nil)
 	runner.AddHandler("fde-change-auth", m.doChangeAuth, nil)
 	runner.AddHandler("fde-add-platform-keys", m.doAddPlatformKeys, nil)
-	runner.AddBlocked(func(t *state.Task, running []*state.Task) bool {
-		if isFDETask(t) {
-			for _, tRunning := range running {
-				if isFDETask(tRunning) {
-					// prevent two fde operations from running in parallel
-					return true
-				}
-			}
-		}
-		return false
-	})
 
 	return m, nil
 }
@@ -578,12 +577,12 @@ func (m *FDEManager) NextUniqueKeyslot(containerRole, prefix string) (ref Keyslo
 
 var _ backend.FDEStateManager = (*unlockedStateManager)(nil)
 
-func (m *FDEManager) resealKeyForBootChains(unlocker boot.Unlocker, method device.SealingMethod, rootdir string, params *boot.ResealKeyForBootChainsParams) error {
+func (m *FDEManager) resealKeyForBootChains(unlocker boot.Unlocker, method device.SealingMethod, rootdir string, params *boot.ResealKeyForBootChainsParams, from reseal.ResealCalledFrom) error {
 	wrapped := &unlockedStateManager{
 		FDEManager: m,
 		unlocker:   unlocker,
 	}
-	return backendResealKeyForBootChains(wrapped, method, rootdir, params)
+	return backendResealKeyForBootChains(wrapped, method, rootdir, params, from)
 }
 
 func fdeMgr(st *state.State) *FDEManager {
@@ -629,7 +628,7 @@ func (m *FDEManager) GetRoleInfo(role string) (roleInfo *backend.RoleInfo, err e
 // if the parameters are loaded first before forcing the reseal.
 //
 // Note: The state will be unlocked/relocked if a reseal is attempted.
-func (m *FDEManager) ensureParametersLoadedWithMaybeReseal(role, containerRole string) error {
+func (m *FDEManager) ensureParametersLoadedWithMaybeReseal(role, containerRole string, from reseal.ResealCalledFrom) error {
 	roleParams, err := m.GetParameters(role, containerRole)
 	if err != nil {
 		return err
@@ -657,7 +656,7 @@ func (m *FDEManager) ensureParametersLoadedWithMaybeReseal(role, containerRole s
 			BootChains: bc,
 			Options:    boot.ResealKeyToModeenvOptions{Force: true},
 		}
-		return backendResealKeyForBootChains(wrapped, method, dirs.GlobalRootDir, &params)
+		return backendResealKeyForBootChains(wrapped, method, dirs.GlobalRootDir, &params, from)
 	}, method)
 }
 

@@ -27,6 +27,7 @@ import (
 	"gopkg.in/tomb.v2"
 
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/gadget/device"
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/overlord/state"
@@ -342,7 +343,7 @@ func (m *FDEManager) doAddPlatformKeys(t *state.Task, _ *tomb.Tomb) (err error) 
 		// NOTE: this is safe to call here even though internally the state is unlocked
 		// because there is conflict detection enforced to prevent other tasks that might
 		// cause a reseal from running (e.g. a kernel refresh).
-		if err := m.ensureParametersLoadedWithMaybeReseal(role, ref.ContainerRole); err != nil {
+		if err := m.ensureParametersLoadedWithMaybeReseal(role, ref.ContainerRole, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 			return fmt.Errorf("internal error: cannot load FDE state parameters: %v", err)
 		}
 

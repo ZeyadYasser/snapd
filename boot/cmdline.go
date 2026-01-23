@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/snapcore/snapd/asserts"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget"
@@ -331,7 +332,7 @@ const (
 // by an update of boot config or the gadget snap. When needed, the modeenv is
 // updated with a candidate command line and the encryption keys are resealed.
 // This helper should be called right before updating the managed boot config.
-func observeCommandLineUpdate(model *asserts.Model, reason commandLineUpdateReason, gadgetSnapOrDir, cmdlineOpt string) (updated bool, err error) {
+func observeCommandLineUpdate(model *asserts.Model, reason commandLineUpdateReason, gadgetSnapOrDir, cmdlineOpt string, from reseal.ResealCalledFrom) (updated bool, err error) {
 	// TODO:UC20: consider updating a recovery system command line
 
 	m, err := loadModeenv()
@@ -375,7 +376,7 @@ func observeCommandLineUpdate(model *asserts.Model, reason commandLineUpdateReas
 
 	// no model changed => ignore FDE hooks
 	resealOpts := ResealKeyToModeenvOptions{ExpectReseal: true, IgnoreFDEHooks: true}
-	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil); err != nil {
+	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, nil, from); err != nil {
 		return false, err
 	}
 	return true, nil

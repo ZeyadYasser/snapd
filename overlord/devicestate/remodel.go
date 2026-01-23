@@ -25,6 +25,7 @@ import (
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/overlord/auth"
 	"github.com/snapcore/snapd/overlord/snapstate"
 	"github.com/snapcore/snapd/overlord/state"
@@ -114,7 +115,7 @@ func cleanupRemodelCtx(chg *state.Change) {
 // All remodelContexts are at least a DeviceContext.
 type remodelContext interface {
 	Init(chg *state.Change)
-	Finish() error
+	Finish(from reseal.ResealCalledFrom) error
 	snapstate.DeviceContext
 
 	Kind() RemodelKind
@@ -261,7 +262,7 @@ func (rc *baseRemodelContext) setRecoverySystemLabel(label string) {
 
 // updateRunModeSystem updates the device context used during boot and makes a
 // record of the new seeded system.
-func (rc *baseRemodelContext) updateRunModeSystem() error {
+func (rc *baseRemodelContext) updateRunModeSystem(from reseal.ResealCalledFrom) error {
 	hasSystemSeed, err := checkForSystemSeed(rc.st, &rc.groundDeviceContext)
 	if err != nil {
 		return fmt.Errorf("cannot look up ubuntu seed role: %w", err)
@@ -279,7 +280,7 @@ func (rc *baseRemodelContext) updateRunModeSystem() error {
 	// booting and consider a new recovery system as as seeded
 	oldDeviceContext := rc.GroundContext()
 	newDeviceContext := &rc.groundDeviceContext
-	err = boot.DeviceChange(oldDeviceContext, newDeviceContext, rc.st.Unlocker())
+	err = boot.DeviceChange(oldDeviceContext, newDeviceContext, rc.st.Unlocker(), from)
 	if err != nil {
 		return fmt.Errorf("cannot switch device: %v", err)
 	}
@@ -334,10 +335,10 @@ func (rc *updateRemodelContext) Store() snapstate.StoreService {
 	return nil
 }
 
-func (rc *updateRemodelContext) Finish() error {
+func (rc *updateRemodelContext) Finish(from reseal.ResealCalledFrom) error {
 	// nothing special to do as part of the finish action, so just run the
 	// update boot step
-	return rc.updateRunModeSystem()
+	return rc.updateRunModeSystem(from)
 }
 
 // newStoreRemodelContext: remodel needing a new store session
@@ -425,7 +426,7 @@ func (rc *newStoreRemodelContext) setCtxDevice(device *auth.DeviceState) {
 	}
 }
 
-func (rc *newStoreRemodelContext) Finish() error {
+func (rc *newStoreRemodelContext) Finish(from reseal.ResealCalledFrom) error {
 	// expose the device state of the remodel with the new session
 	// to the rest of the system
 	remodelDevice, err := rc.device()
@@ -435,7 +436,7 @@ func (rc *newStoreRemodelContext) Finish() error {
 	if err := rc.deviceMgr.setDevice(remodelDevice); err != nil {
 		return err
 	}
-	return rc.updateRunModeSystem()
+	return rc.updateRunModeSystem(from)
 }
 
 func (rc *newStoreRemodelContext) deviceBackend() storecontext.DeviceBackend {

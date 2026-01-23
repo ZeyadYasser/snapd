@@ -22,6 +22,7 @@ package boot
 import (
 	"fmt"
 
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/snap"
 )
@@ -36,7 +37,7 @@ var _ BootParticipant = (*coreBootParticipant)(nil)
 
 func (*coreBootParticipant) IsTrivial() bool { return false }
 
-func (bp *coreBootParticipant) SetNextBoot(bootCtx NextBootContext) (rebootInfo RebootInfo, err error) {
+func (bp *coreBootParticipant) SetNextBoot(bootCtx NextBootContext, from reseal.ResealCalledFrom) (rebootInfo RebootInfo, err error) {
 	modeenvLock()
 	defer modeenvUnlock()
 
@@ -49,7 +50,7 @@ func (bp *coreBootParticipant) SetNextBoot(bootCtx NextBootContext) (rebootInfo 
 
 	if u != nil {
 		const markedSuccessful = false
-		if err := u.commit(markedSuccessful); err != nil {
+		if err := u.commit(markedSuccessful, from); err != nil {
 			return RebootInfo{RebootRequired: false}, fmt.Errorf(errPrefix, err)
 		}
 	}

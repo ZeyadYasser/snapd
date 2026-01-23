@@ -26,6 +26,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/logger"
@@ -189,7 +190,7 @@ func newBootStateUpdate20(m *Modeenv) (*bootStateUpdate20, error) {
 }
 
 // commit will write out boot state persistently to disk.
-func (u20 *bootStateUpdate20) commit(markedSuccessful bool) error {
+func (u20 *bootStateUpdate20) commit(markedSuccessful bool, from reseal.ResealCalledFrom) error {
 	if !isModeenvLocked() {
 		return fmt.Errorf("internal error: cannot commit modeenv without the lock")
 	}
@@ -246,7 +247,7 @@ func (u20 *bootStateUpdate20) commit(markedSuccessful bool) error {
 	// changed because of unasserted kernels, then pass a
 	// flag as hint whether to reseal based on whether we
 	// wrote the modeenv
-	if err := resealKeyToModeenv(dirs.GlobalRootDir, u20.writeModeenv, resealOpts, nil); err != nil {
+	if err := resealKeyToModeenv(dirs.GlobalRootDir, u20.writeModeenv, resealOpts, nil, from); err != nil {
 		return err
 	}
 

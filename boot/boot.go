@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/osutil"
 	"github.com/snapcore/snapd/snap"
@@ -74,7 +75,7 @@ type BootParticipant interface {
 	// select the right bootable base (from the model assertion). It is a
 	// noop for not relevant snaps.  Otherwise it returns whether a reboot
 	// is required.
-	SetNextBoot(bootCtx NextBootContext) (rebootInfo RebootInfo, err error)
+	SetNextBoot(bootCtx NextBootContext, from reseal.ResealCalledFrom) (rebootInfo RebootInfo, err error)
 
 	// Is this a trivial implementation of the interface?
 	IsTrivial() bool
@@ -95,7 +96,7 @@ type BootKernel interface {
 
 type trivial struct{}
 
-func (trivial) SetNextBoot(bootCtx NextBootContext) (RebootInfo, error) {
+func (trivial) SetNextBoot(bootCtx NextBootContext, from reseal.ResealCalledFrom) (RebootInfo, error) {
 	return RebootInfo{RebootRequired: false}, nil
 }
 func (trivial) IsTrivial() bool                          { return true }
@@ -343,7 +344,7 @@ func GetCurrentBoot(t snap.Type, dev snap.Device) (snap.PlaceInfo, error) {
 // bootStateUpdate carries the state for an on-going boot state update.
 // At the end it can be used to commit it.
 type bootStateUpdate interface {
-	commit(markedSuccesful bool) error
+	commit(markedSuccesful bool, from reseal.ResealCalledFrom) error
 }
 
 // MarkBootSuccessful marks the current boot as successful. This means
@@ -366,7 +367,7 @@ type bootStateUpdate interface {
 //     means snapd did not start successfully. In this case the bootloader
 //     will set snap_mode="" and the system will boot with the known good
 //     values from snap_{core,kernel}
-func MarkBootSuccessful(dev snap.Device) error {
+func MarkBootSuccessful(dev snap.Device, from reseal.ResealCalledFrom) error {
 	modeenvLock()
 	defer modeenvUnlock()
 
@@ -404,7 +405,7 @@ func MarkBootSuccessful(dev snap.Device) error {
 
 	if u != nil {
 		const markedSuccessful = true
-		if err := u.commit(markedSuccessful); err != nil {
+		if err := u.commit(markedSuccessful, from); err != nil {
 			return fmt.Errorf(errPrefix, err)
 		}
 	}
@@ -452,7 +453,7 @@ func SetRecoveryBootSystemAndMode(dev snap.Device, systemLabel, mode string) err
 // needs information from the model, the gadget we are updating to,
 // and any additional kernel command line arguments coming from system
 // options. Returns true when an update was carried out.
-func UpdateManagedBootConfigs(dev snap.Device, gadgetSnapOrDir, cmdlineAppend string) (updated bool, err error) {
+func UpdateManagedBootConfigs(dev snap.Device, gadgetSnapOrDir, cmdlineAppend string, from reseal.ResealCalledFrom) (updated bool, err error) {
 	if !dev.HasModeenv() {
 		// only UC20 devices use managed boot config
 		return false, nil
@@ -463,7 +464,7 @@ func UpdateManagedBootConfigs(dev snap.Device, gadgetSnapOrDir, cmdlineAppend st
 	modeenvLock()
 	defer modeenvUnlock()
 
-	return updateManagedBootConfigForBootloader(dev, ModeRun, gadgetSnapOrDir, cmdlineAppend)
+	return updateManagedBootConfigForBootloader(dev, ModeRun, gadgetSnapOrDir, cmdlineAppend, from)
 }
 
 func updateCmdlineVars(tbl bootloader.TrustedAssetsBootloader, gadgetSnapOrDir, cmdlineAppend string, candidate bool, dev snap.Device) error {
@@ -484,7 +485,7 @@ func updateCmdlineVars(tbl bootloader.TrustedAssetsBootloader, gadgetSnapOrDir, 
 	return nil
 }
 
-func updateManagedBootConfigForBootloader(dev snap.Device, mode, gadgetSnapOrDir, cmdlineAppend string) (updated bool, err error) {
+func updateManagedBootConfigForBootloader(dev snap.Device, mode, gadgetSnapOrDir, cmdlineAppend string, from reseal.ResealCalledFrom) (updated bool, err error) {
 	if mode != ModeRun {
 		return false, fmt.Errorf("internal error: updating boot config of recovery bootloader is not supported yet")
 	}
@@ -503,7 +504,7 @@ func updateManagedBootConfigForBootloader(dev snap.Device, mode, gadgetSnapOrDir
 	}
 
 	// boot config update can lead to a change of kernel command line
-	cmdlineChange, err := observeCommandLineUpdate(dev.Model(), commandLineUpdateReasonSnapd, gadgetSnapOrDir, cmdlineAppend)
+	cmdlineChange, err := observeCommandLineUpdate(dev.Model(), commandLineUpdateReasonSnapd, gadgetSnapOrDir, cmdlineAppend, from)
 	if err != nil {
 		return false, err
 	}
@@ -531,7 +532,7 @@ func updateManagedBootConfigForBootloader(dev snap.Device, mode, gadgetSnapOrDir
 // system options). Returns true when a change in command line has
 // been observed and a reboot is needed. The reboot, if needed, should
 // be requested at the the earliest possible occasion.
-func UpdateCommandLineForGadgetComponent(dev snap.Device, gadgetSnapOrDir, cmdlineAppend string) (needsReboot bool, err error) {
+func UpdateCommandLineForGadgetComponent(dev snap.Device, gadgetSnapOrDir, cmdlineAppend string, from reseal.ResealCalledFrom) (needsReboot bool, err error) {
 	if !dev.HasModeenv() {
 		// only UC20 devices are supported
 		return false, fmt.Errorf("internal error: command line component cannot be updated on pre-UC20 devices")
@@ -554,7 +555,7 @@ func UpdateCommandLineForGadgetComponent(dev snap.Device, gadgetSnapOrDir, cmdli
 	}
 
 	// gadget update can lead to a change of kernel command line
-	cmdlineChange, err := observeCommandLineUpdate(dev.Model(), commandLineUpdateReasonGadget, gadgetSnapOrDir, cmdlineAppend)
+	cmdlineChange, err := observeCommandLineUpdate(dev.Model(), commandLineUpdateReasonGadget, gadgetSnapOrDir, cmdlineAppend, from)
 	if err != nil {
 		return false, err
 	}

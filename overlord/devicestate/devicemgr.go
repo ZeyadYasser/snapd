@@ -33,6 +33,7 @@ import (
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/asserts/sysdb"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/client"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget"
@@ -97,6 +98,9 @@ func init() {
 	swfeats.RegisterEnsure("DeviceManager", "ensurePostFactoryReset")
 	swfeats.RegisterEnsure("DeviceManager", "ensureExpiredUsersRemoved")
 	swfeats.RegisterEnsure("DeviceManager", "ensureEarlyBootXKBConfigUpdated")
+
+	snapstate.RegisterResealingTaskKind("update-gadget-cmdline")
+	snapstate.RegisterResealingTaskKind("update-managed-boot-config")
 }
 
 // EarlyConfig is a hook set by configstate that can process early configuration
@@ -1215,7 +1219,7 @@ func (m *DeviceManager) ensureSerialBoundSystemUserAssertionsProcessed() error {
 	return nil
 }
 
-func (m *DeviceManager) ensureBootOk() error {
+func (m *DeviceManager) ensureBootOk(from reseal.ResealCalledFrom) error {
 	m.state.Lock()
 	defer m.state.Unlock()
 
@@ -1230,7 +1234,7 @@ func (m *DeviceManager) ensureBootOk() error {
 			return err
 		}
 		if err == nil && deviceCtx.Model().KernelSnap() != nil {
-			if err := boot.MarkBootSuccessful(deviceCtx); err != nil {
+			if err := boot.MarkBootSuccessful(deviceCtx, from); err != nil {
 				return err
 			}
 			if err := secbootMarkSuccessful(); err != nil {
@@ -1706,7 +1710,7 @@ func (m *DeviceManager) appendTriedRecoverySystem(label string) error {
 	return nil
 }
 
-func (m *DeviceManager) ensureTriedRecoverySystem() error {
+func (m *DeviceManager) ensureTriedRecoverySystem(from reseal.ResealCalledFrom) error {
 	if release.OnClassic {
 		return nil
 	}
@@ -1749,7 +1753,7 @@ func (m *DeviceManager) ensureTriedRecoverySystem() error {
 		// no system was tried
 	}
 	if outcome != boot.TryRecoverySystemOutcomeNoneTried {
-		if err := boot.ClearTryRecoverySystem(deviceCtx, label); err != nil {
+		if err := boot.ClearTryRecoverySystem(deviceCtx, label, from); err != nil {
 			logger.Noticef("cannot clear tried recovery system status: %v", err)
 			return err
 		}
@@ -2018,7 +2022,7 @@ func (m *DeviceManager) Ensure() error {
 			errs = append(errs, err)
 		}
 
-		if err := m.ensureBootOk(); err != nil {
+		if err := m.ensureBootOk(reseal.ResealCalledFromEnsure("ensureBootOk")); err != nil {
 			errs = append(errs, err)
 		}
 
@@ -2030,7 +2034,7 @@ func (m *DeviceManager) Ensure() error {
 			errs = append(errs, err)
 		}
 
-		if err := m.ensureTriedRecoverySystem(); err != nil {
+		if err := m.ensureTriedRecoverySystem(reseal.ResealCalledFromEnsure("ensureTriedRecoverySystem")); err != nil {
 			errs = append(errs, err)
 		}
 

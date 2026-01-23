@@ -26,6 +26,7 @@ import (
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/overlord/restart"
 	"github.com/snapcore/snapd/overlord/snapstate"
 	"github.com/snapcore/snapd/overlord/state"
@@ -79,7 +80,7 @@ func (m *DeviceManager) doUpdateManagedBootConfig(t *state.Task, _ *tomb.Tomb) e
 	}
 
 	// TODO:UC20 update recovery boot config
-	updated, err := boot.UpdateManagedBootConfigs(devCtx, currentData.RootDir, cmdlineAppend)
+	updated, err := boot.UpdateManagedBootConfigs(devCtx, currentData.RootDir, cmdlineAppend, reseal.ResealCalledFromTask(t.Kind()))
 	if err != nil {
 		return fmt.Errorf("cannot update boot config assets: %v", err)
 	}

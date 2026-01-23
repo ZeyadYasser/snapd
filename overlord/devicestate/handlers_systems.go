@@ -32,6 +32,7 @@ import (
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/osutil"
@@ -260,7 +261,7 @@ func (m *DeviceManager) doRemoveRecoverySystem(t *state.Task, _ *tomb.Tomb) erro
 
 	recoverySystemsDir := filepath.Join(boot.InitramfsUbuntuSeedDir, "systems")
 
-	if err := boot.DropRecoverySystem(deviceCtx, setup.Label); err != nil {
+	if err := boot.DropRecoverySystem(deviceCtx, setup.Label, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 		return fmt.Errorf("cannot drop recovery system %q: %v", setup.Label, err)
 	}
 
@@ -346,7 +347,7 @@ func (m *DeviceManager) doCreateRecoverySystem(t *state.Task, _ *tomb.Tomb) (err
 		if err := os.RemoveAll(systemDirectory); err != nil && !os.IsNotExist(err) {
 			logger.Noticef("when removing recovery system %q: %v", label, err)
 		}
-		if err := boot.DropRecoverySystem(remodelCtx, label); err != nil {
+		if err := boot.DropRecoverySystem(remodelCtx, label, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 			logger.Noticef("when dropping the recovery system %q: %v", label, err)
 		}
 		// we could have reentered the task after a reboot, but the
@@ -380,7 +381,7 @@ func (m *DeviceManager) doCreateRecoverySystem(t *state.Task, _ *tomb.Tomb) (err
 	// not part of a remodel), then we immediately promote the system and mark
 	// it as ready to use
 	if skipSystemTest {
-		if err := boot.PromoteTriedRecoverySystem(remodelCtx, label, []string{label}); err != nil {
+		if err := boot.PromoteTriedRecoverySystem(remodelCtx, label, []string{label}, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 			return fmt.Errorf("cannot promote recovery system %q: %v", label, err)
 		}
 
@@ -394,7 +395,7 @@ func (m *DeviceManager) doCreateRecoverySystem(t *state.Task, _ *tomb.Tomb) (err
 	}
 
 	// 3. set up boot variables for tracking the tried system state
-	if err := boot.SetTryRecoverySystem(remodelCtx, label); err != nil {
+	if err := boot.SetTryRecoverySystem(remodelCtx, label, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 		// rollback?
 		return fmt.Errorf("cannot attempt booting into recovery system %q: %v", label, err)
 	}
@@ -452,7 +453,7 @@ func (m *DeviceManager) undoCreateRecoverySystem(t *state.Task, _ *tomb.Tomb) er
 		t.Logf("removed recovery system directory %v", setup.Directory)
 	}
 
-	if err := boot.DropRecoverySystem(remodelCtx, label); err != nil {
+	if err := boot.DropRecoverySystem(remodelCtx, label, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 		return fmt.Errorf("cannot drop a current recovery system %q: %v", label, err)
 	}
 
@@ -505,7 +506,7 @@ func (m *DeviceManager) doFinalizeTriedRecoverySystem(t *state.Task, _ *tomb.Tom
 	} else {
 		logger.Debugf("promoting recovery system %q", label)
 
-		if err := boot.PromoteTriedRecoverySystem(remodelCtx, label, triedSystems); err != nil {
+		if err := boot.PromoteTriedRecoverySystem(remodelCtx, label, triedSystems, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 			return fmt.Errorf("cannot promote recovery system %q: %v", label, err)
 		}
 
@@ -638,7 +639,7 @@ func (m *DeviceManager) undoFinalizeTriedRecoverySystem(t *state.Task, _ *tomb.T
 		}
 	}
 
-	if err := boot.DropRecoverySystem(remodelCtx, label); err != nil {
+	if err := boot.DropRecoverySystem(remodelCtx, label, reseal.ResealCalledFromTask(t.Kind())); err != nil {
 		return fmt.Errorf("cannot drop a good recovery system %q: %v", label, err)
 	}
 

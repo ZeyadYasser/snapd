@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/overlord/state"
 	"github.com/snapcore/snapd/strutil"
 )
@@ -378,4 +380,54 @@ func CheckUpdateKernelCommandLineConflict(st *state.State, ignoreChangeID string
 	}
 
 	return nil
+}
+
+var resealingTaskKindCheckers = make(map[string]func(t *state.Task) bool)
+
+func RegisterResealingTaskKind(kind string) {
+	if _, exists := resealingTaskKindCheckers[kind]; exists {
+		logger.Panicf("internal error: reseal task kind checker for %q is already registered", kind)
+	}
+	resealingTaskKindCheckers[kind] = func(t *state.Task) bool { return true }
+}
+
+func RegisterResealingTaskCheckerForKind(kind string, checker func(t *state.Task) bool) {
+	if _, exists := resealingTaskKindCheckers[kind]; exists {
+		logger.Panicf("internal error: reseal task kind checker for %q is already registered", kind)
+	}
+	resealingTaskKindCheckers[kind] = checker
+}
+
+func isResealingTask(t *state.Task) bool {
+	check := resealingTaskKindCheckers[t.Kind()]
+	return check(t)
+}
+
+func resealingTaskRunning(t *state.Task, running []*state.Task) (block bool) {
+	if !isResealingTask(t) {
+		return false
+	}
+
+	// Simple symmetric blocking of resealing tasks
+	for _, tRunning := range running {
+		if isResealingTask(tRunning) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isLinkTaskResealing(t *state.Task) bool {
+	deviceCtx, err := DeviceCtx(t.State(), t, nil)
+	if err != nil {
+		logger.Debugf("internal error: cannot obtain device context: %v", err)
+		return false
+	}
+	snapsup, err := TaskSnapSetup(t)
+	if err != nil {
+		logger.Debugf("internal error: cannot obtain snap setup: %v", err)
+		return false
+	}
+	return !boot.Participant(snapsup.placeInfo(), snapsup.Type, deviceCtx).IsTrivial()
 }

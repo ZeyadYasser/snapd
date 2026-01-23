@@ -36,6 +36,7 @@ import (
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/asserts/snapasserts"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/client"
 	"github.com/snapcore/snapd/client/clientutil"
 	"github.com/snapcore/snapd/cmd/snaplock"
@@ -1770,7 +1771,7 @@ func (m *SnapManager) undoUnlinkCurrentSnap(t *state.Task, _ *tomb.Tomb) error {
 		return err
 	}
 	isUndo := true
-	reboot, err := m.backend.MaybeSetNextBoot(oldInfo, deviceCtx, isUndo)
+	reboot, err := m.backend.MaybeSetNextBoot(oldInfo, deviceCtx, isUndo, reseal.ResealCalledFromTask(t.Kind()))
 	if err != nil {
 		return err
 	}
@@ -2459,7 +2460,7 @@ func (m *SnapManager) doLinkSnap(t *state.Task, _ *tomb.Tomb) (retErr error) {
 		// configuration has been already written but DoneStatus in the state
 		// has not.
 		isUndo := false
-		rebootInfo, err = m.backend.MaybeSetNextBoot(newInfo, deviceCtx, isUndo)
+		rebootInfo, err = m.backend.MaybeSetNextBoot(newInfo, deviceCtx, isUndo, reseal.ResealCalledFromTask(t.Kind()))
 		if err != nil {
 			return err
 		}
@@ -2803,7 +2804,7 @@ func (m *SnapManager) maybeRemoveAppArmorProfilesOnSnapdDowngrade(st *state.Stat
 // will switch the bootloader to the new kernel but if the change is later
 // undone we need to switch back to the kernel of the old model.
 // It returns a non-nil *restartPossibility if a restart should be considered.
-func (m *SnapManager) maybeUndoRemodelBootChanges(t *state.Task) (*restartPossibility, error) {
+func (m *SnapManager) maybeUndoRemodelBootChanges(t *state.Task, from reseal.ResealCalledFrom) (*restartPossibility, error) {
 	// get the new and the old model
 	deviceCtx, err := DeviceCtx(t.State(), t, nil)
 	if err != nil {
@@ -2855,7 +2856,7 @@ func (m *SnapManager) maybeUndoRemodelBootChanges(t *state.Task) (*restartPossib
 		return nil, err
 	}
 	bp := boot.Participant(info, info.Type(), groundDeviceCtx)
-	rebootInfo, err := bp.SetNextBoot(boot.NextBootContext{BootWithoutTry: true})
+	rebootInfo, err := bp.SetNextBoot(boot.NextBootContext{BootWithoutTry: true}, from)
 	if err != nil {
 		return nil, err
 	}
@@ -3069,7 +3070,7 @@ func (m *SnapManager) undoLinkSnap(t *state.Task, _ *tomb.Tomb) error {
 
 	// restartPoss will be set if we should maybe schedule a restart
 	var restartPoss *restartPossibility
-	restartPoss, err = m.maybeUndoRemodelBootChanges(t)
+	restartPoss, err = m.maybeUndoRemodelBootChanges(t, reseal.ResealCalledFromTask(t.Kind()))
 	if err != nil {
 		return err
 	}
@@ -3781,7 +3782,7 @@ func (m *SnapManager) undoUnlinkSnap(t *state.Task, _ *tomb.Tomb) error {
 	}
 
 	isUndo := true
-	reboot, err := m.backend.MaybeSetNextBoot(info, deviceCtx, isUndo)
+	reboot, err := m.backend.MaybeSetNextBoot(info, deviceCtx, isUndo, reseal.ResealCalledFromTask(t.Kind()))
 	if err != nil {
 		return err
 	}

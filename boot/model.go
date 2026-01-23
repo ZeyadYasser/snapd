@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 
 	"github.com/snapcore/snapd/asserts"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/osutil"
 	"github.com/snapcore/snapd/snap"
@@ -34,7 +35,7 @@ import (
 // encryption keys will be resealed for both models. The device model file which
 // is measured during boot will be updated. The recovery systems that belong to
 // the old model will no longer be usable.
-func DeviceChange(from snap.Device, to snap.Device, unlocker Unlocker) error {
+func DeviceChange(from snap.Device, to snap.Device, unlocker Unlocker, resealFrom reseal.ResealCalledFrom) error {
 	if !to.HasModeenv() {
 		// nothing useful happens on a non-UC20 system here
 		return nil
@@ -75,7 +76,7 @@ func DeviceChange(from snap.Device, to snap.Device, unlocker Unlocker) error {
 	// Because changing models affect FDE hooks keys, we need to
 	// make sure those are also resealed.
 	resealOpts := ResealKeyToModeenvOptions{ExpectReseal: true, IgnoreFDEHooks: false}
-	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, unlocker); err != nil {
+	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, unlocker, resealFrom); err != nil {
 		// best effort clear the modeenv's try model
 		m.clearTryModel()
 		if mErr := m.Write(); mErr != nil {
@@ -119,7 +120,7 @@ func DeviceChange(from snap.Device, to snap.Device, unlocker Unlocker) error {
 
 	// past a successful reseal, the old recovery systems become unusable and will
 	// not be able to access the data anymore
-	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, unlocker); err != nil {
+	if err := resealKeyToModeenv(dirs.GlobalRootDir, m, resealOpts, unlocker, resealFrom); err != nil {
 		// resealing failed, but modeenv and the file have been modified
 
 		// first restore the modeenv in case we reboot, such that if the

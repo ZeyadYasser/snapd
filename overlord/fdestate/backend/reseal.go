@@ -28,6 +28,7 @@ import (
 
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/boot/reseal"
 	"github.com/snapcore/snapd/bootloader"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget/device"
@@ -625,7 +626,10 @@ func updateFallbackProtectionProfile(
 }
 
 // ResealKeyForBootChains reseals disk encryption keys with the given bootchains.
-func ResealKeyForBootChains(manager FDEStateManager, method device.SealingMethod, rootdir string, params *boot.ResealKeyForBootChainsParams) error {
+func ResealKeyForBootChains(
+	manager FDEStateManager, method device.SealingMethod, rootdir string,
+	params *boot.ResealKeyForBootChainsParams, from reseal.ResealCalledFrom,
+) error {
 	return resealKeys(manager, method, rootdir,
 		resealInputs{
 			bootChains: params.BootChains,
@@ -636,7 +640,8 @@ func ResealKeyForBootChains(manager FDEStateManager, method device.SealingMethod
 			EnsureProvisioned: params.Options.EnsureProvisioned,
 			IgnoreFDEHooks:    params.Options.IgnoreFDEHooks,
 			Revoke:            params.Options.RevokeOldKeys,
-		})
+		},
+		from)
 }
 
 // ResealKeysForSignaturesDBUpdate reseals disk encryption keys for the provided
@@ -644,6 +649,7 @@ func ResealKeyForBootChains(manager FDEStateManager, method device.SealingMethod
 func ResealKeysForSignaturesDBUpdate(
 	manager FDEStateManager, method device.SealingMethod, rootdir string,
 	params *boot.ResealKeyForBootChainsParams, dbUpdate []byte,
+	from reseal.ResealCalledFrom,
 ) error {
 	return resealKeys(manager, method, rootdir,
 		resealInputs{
@@ -660,7 +666,8 @@ func ResealKeysForSignaturesDBUpdate(
 			Force: true,
 			// no model changed => ignore FDE hooks
 			IgnoreFDEHooks: true,
-		})
+		},
+		from)
 }
 
 type resealInputs struct {
@@ -680,6 +687,7 @@ func resealKeys(
 	manager FDEStateManager, method device.SealingMethod, rootdir string,
 	inputs resealInputs,
 	opts resealOptions,
+	from reseal.ResealCalledFrom,
 ) error {
 	switch method {
 	case device.SealingMethodFDESetupHook:
