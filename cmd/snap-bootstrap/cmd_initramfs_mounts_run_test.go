@@ -148,6 +148,16 @@ func (s *initramfsMountsSuite) TestInitramfsMountsRunModeUnencryptedWithSaveHapp
 
 	_, err = main.Parser().ParseArgs([]string{"initramfs-mounts"})
 	c.Assert(err, IsNil)
+
+	for _, sn := range []snap.PlaceInfo{s.core20, s.gadget, s.kernel} {
+		unitName := systemd.EscapeUnitNamePath(dirs.StripRootDir(sn.MountDir())) + ".mount"
+		dropIn := filepath.Join(dirs.SnapRuntimeServicesDir, unitName+".d", "50-snap-bootstrap.conf")
+		c.Check(dropIn, testutil.FileEquals, fmt.Sprintf(`[Mount]
+What=/var/lib/snapd/snaps/%s
+Type=squashfs
+Options=nodev,ro,x-gdu.hide,x-gvfs-hide
+`, sn.Filename()))
+	}
 }
 
 func (s *initramfsMountsSuite) TestInitramfsMountsRunModeHappyNoGadgetMount(c *C) {

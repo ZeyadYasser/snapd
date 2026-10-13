@@ -88,10 +88,10 @@ func integrityFilePathPrefix(snapPath string) string {
 	return strings.TrimSuffix(snapPath, ".snap") + "_"
 }
 
-// integrityFilePath returns <instance_name>_<revision>_<digest>.dmverity next to the snap.
+// IntegrityFilePath returns <instance_name>_<revision>_<digest>.dmverity next to the snap.
 //
 // TODO: consider handling for snap components
-func integrityFilePath(snapPath, digest string) string {
+func IntegrityFilePath(snapPath, digest string) string {
 	return integrityFilePathPrefix(snapPath) + digest + dmVerityFileSuffix
 }
 
@@ -100,7 +100,7 @@ func integrityFilePath(snapPath, digest string) string {
 func (params *IntegrityDataParams) IntegrityFile(snapPath string) (string, error) {
 	switch params.Type {
 	case "dm-verity":
-		return integrityFilePath(snapPath, params.Digest), nil
+		return IntegrityFilePath(snapPath, params.Digest), nil
 	default:
 		return "", fmt.Errorf("unexpected integrity data type %q", params.Type)
 	}
@@ -142,13 +142,13 @@ func FindIntegrityFilesForSnap(snapPath string, opts *FindIntegrityFilesOptions)
 	prefix := integrityFilePathPrefix(snapPath)
 	var files []string
 	// glob matches path/to/snap/<instance_name>_<revision>_*.dmverity
-	matches, err := filepath.Glob(integrityFilePath(snapPath, "*"))
+	matches, err := filepath.Glob(IntegrityFilePath(snapPath, "*"))
 	if err != nil {
 		return nil, err
 	}
 	if opts.IncludePartial {
 		// glob matches path/to/snap/<instance_name>_<revision>_*.dmverity.partial
-		partialMatches, err := filepath.Glob(integrityFilePath(snapPath, "*") + ".partial")
+		partialMatches, err := filepath.Glob(IntegrityFilePath(snapPath, "*") + ".partial")
 		if err != nil {
 			return nil, err
 		}

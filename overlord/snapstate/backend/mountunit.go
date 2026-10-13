@@ -64,6 +64,7 @@ func addMountUnit(c snap.ContainerPlaceInfo, sysd systemd.Systemd, opts mountUni
 		if err != nil {
 			return err
 		}
+		mountOptions.Options = append(mountOptions.Options, "X-mount.noloop")
 		mountOptions.Options = append(mountOptions.Options, integrityMountOpts...)
 	}
 

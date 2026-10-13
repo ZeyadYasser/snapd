@@ -31,6 +31,9 @@ import (
 
 	main "github.com/snapcore/snapd/cmd/snap-bootstrap"
 	"github.com/snapcore/snapd/dirs"
+	"github.com/snapcore/snapd/osutil"
+	"github.com/snapcore/snapd/osutil/squashfs"
+	"github.com/snapcore/snapd/snap"
 	"github.com/snapcore/snapd/systemd"
 	"github.com/snapcore/snapd/testutil"
 )
@@ -686,4 +689,30 @@ func (s *doSystemdMountSuite) TestDoSystemdMountWrongFsOpts(c *C) {
 	err := main.DoSystemdMount("what", "where", opts)
 	c.Check(err, ErrorMatches, "cannot mount \"what\" at \"where\": invalid options")
 
+}
+
+func (s *doSystemdMountSuite) TestWriteSnapMountUnitDropIn(c *C) {
+	s.AddCleanup(squashfs.MockNeedsFuse(false))
+	s.AddCleanup(osutil.MockMountInfo(""))
+
+	sn, err := snap.ParsePlaceInfoFromSnapFileName("core24_12.snap")
+	c.Assert(err, IsNil)
+	dropIn := filepath.Join(dirs.SnapRuntimeServicesDir,
+		systemd.EscapeUnitNamePath(dirs.StripRootDir(sn.MountDir()))+".mount.d", "50-snap-bootstrap.conf")
+
+	for _, tc := range []struct {
+		verityOpts *main.DmVerityOptions
+		expWhat    string
+	}{
+		{nil, "/var/lib/snapd/snaps/core24_12.snap"},
+		{&main.DmVerityOptions{}, "/var/lib/snapd/snaps/core24_12.snap"},
+		{&main.DmVerityOptions{RootHash: "abcd", HashDevice: "/some/hash/device"}, "/dev/mapper/abcd-verity"},
+	} {
+		c.Assert(main.WriteSnapMountUnitDropIn(sn, tc.verityOpts), IsNil)
+		c.Check(dropIn, testutil.FileEquals, fmt.Sprintf(`[Mount]
+What=%s
+Type=squashfs
+Options=nodev,ro,x-gdu.hide,x-gvfs-hide
+`, tc.expWhat))
+	}
 }

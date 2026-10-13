@@ -27,8 +27,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/snapcore/snapd/boot"
 	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/osutil"
+	"github.com/snapcore/snapd/snap"
 	"github.com/snapcore/snapd/systemd"
 )
 
@@ -497,6 +499,12 @@ func writeSysrootMountUnit(what, mntType string, opts fsOpts) (err error) {
 			if err != nil {
 				return err
 			}
+			sysrootState := &boot.SysrootState{
+				Integrity: &boot.SysrootIntegrity{Type: "dm-verity"},
+			}
+			if err := sysrootState.Write(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -517,6 +525,32 @@ func writeSysrootMountUnit(what, mntType string, opts fsOpts) (err error) {
 		return err
 	}
 	return nil
+}
+
+const snapMountUnitDropIn = `[Mount]
+What=%[1]s
+Type=%[2]s
+Options=%[3]s
+`
+
+// writeSnapMountUnitDropIn makes the persistent mount unit of a snap mounted by
+// the initramfs match how it was mounted in this boot, whatever snapd wrote.
+func writeSnapMountUnitDropIn(sn snap.PlaceInfo, verityOpts *dmVerityOptions) error {
+	what := filepath.Join(dirs.StripRootDir(dirs.SnapBlobDir), sn.Filename())
+	if verityOpts != nil && verityOpts.RootHash != "" {
+		// libmount names dm-verity devices after their root hash
+		what = filepath.Join("/dev/mapper", verityOpts.RootHash+"-verity")
+	}
+	hostFsType, options := systemd.HostFsTypeAndMountOptions("squashfs")
+
+	unitName := systemd.EscapeUnitNamePath(dirs.StripRootDir(sn.MountDir())) + ".mount"
+	dropInDir := filepath.Join(dirs.SnapRuntimeServicesDirUnder(dirs.GlobalRootDir), unitName+".d")
+	if err := os.MkdirAll(dropInDir, 0755); err != nil {
+		return err
+	}
+	content := fmt.Sprintf(snapMountUnitDropIn, what, hostFsType, strings.Join(options, ","))
+	// This is in /run, no need for atomic writes
+	return os.WriteFile(filepath.Join(dropInDir, "50-snap-bootstrap.conf"), []byte(content), 0644)
 }
 
 // writeSnapMountUnit writes a mount unit for a snap but does not activate it.

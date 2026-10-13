@@ -25,21 +25,27 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"github.com/snapcore/snapd/asserts"
+	"github.com/snapcore/snapd/asserts/sysdb"
 	"github.com/snapcore/snapd/boot"
+	"github.com/snapcore/snapd/dirs"
 	"github.com/snapcore/snapd/gadget"
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/osutil"
 	"github.com/snapcore/snapd/secboot"
 	"github.com/snapcore/snapd/seed"
 	"github.com/snapcore/snapd/snap"
+	"github.com/snapcore/snapd/snap/integrity"
+	"github.com/snapcore/snapd/snap/naming"
 	"github.com/snapcore/snapd/timings"
 )
 
 var (
 	osutilSetTime = osutil.SetTime
 	runtimeNumCPU = runtime.NumCPU
+	sysdbTrusted  = sysdb.Trusted
 )
 
 // initramfsMountsState helps tracking the state and progress
@@ -52,6 +58,8 @@ type initramfsMountsState struct {
 	seeds         map[string]seed.Seed
 
 	activateContext secboot.ActivateContext
+
+	essentialSnaps map[naming.SnapName]*essentialSnapInfo
 }
 
 var errRunModeNoImpliedRecoverySystem = errors.New("internal error: no implied recovery system in run mode")
@@ -160,5 +168,184 @@ func (mst *initramfsMountsState) EphemeralModeenvForModel(model *asserts.Model, 
 		Grade:          string(model.Grade()),
 		// TODO:UC20: what about current kernel snaps, trusted boot assets and
 		//            kernel command lines?
+	}, nil
+}
+
+// LoadEssentialSnapRevisions will load the snap-revision assertions for the essential snaps that are going to be used
+// in this boot. During the first boot in run mode, the assertion database hasn't yet been created therefore the
+// snap-revision assertions from the seed are being used. Otherwise an in-memory assertion database is instantiated from
+// the assertion db in ubuntu-data.
+func (mst *initramfsMountsState) LoadEssentialSnapRevisions(modeEnv *boot.Modeenv, mounts map[snap.Type]snap.PlaceInfo) error {
+
+	if mst.essentialSnaps == nil {
+		mst.essentialSnaps = make(map[naming.SnapName]*essentialSnapInfo)
+	}
+
+	isRunMode := true
+	rootfsDir := boot.InitramfsWritableDir(mst.verifiedModel, isRunMode)
+	assertionsPath := dirs.SnapAssertionsDirUnder(rootfsDir)
+
+	model, err := mst.UnverifiedBootModel()
+	if err != nil {
+		return err
+	}
+	firstBoot := modeEnv.RecoverySystem != "" && !model.Classic()
+	if firstBoot {
+		theSeed, err := mst.LoadSeed(modeEnv.RecoverySystem)
+		if err != nil {
+			return fmt.Errorf("cannot load metadata and verify snapd snap: %v", err)
+		}
+		perf := timings.New(nil)
+		if err := theSeed.LoadEssentialMeta([]snap.Type{snap.TypeBase, snap.TypeKernel, snap.TypeGadget}, perf); err != nil {
+			return fmt.Errorf("cannot load metadata and verify snapd snap: %v", err)
+		}
+
+		essSnaps := theSeed.EssentialSnaps()
+
+		for _, essSnap := range essSnaps {
+			// we use the path of the run mode snap and the assertion from the seed
+			snapPath := filepath.Join(dirs.SnapBlobDirUnder(rootfsDir), essSnap.PlaceInfo().Filename())
+			mst.essentialSnaps[essSnap.SnapName()] = &essentialSnapInfo{
+				path:                snapPath,
+				integrityDataParams: essSnap.IntegrityDataParams,
+			}
+		}
+
+		return nil
+	}
+
+	// In order to avoid hashing each snap to get to the 'snap-sha3-384', which is the primary key for snap-revision
+	// assertions, the latest snap-revision assertion for each snap is discovered from its name and the latest
+	// snap revision number as it is parsed from the modeenv. The snap-revision assertion is then loaded in a
+	// temporary in-memory database in order to be validated against the Canonical Root account-key. The asserts
+	// Fetcher API will validate the snap-revision assertions prerequisite assertions too.
+	fsdb, err := sysdb.OpenAt(assertionsPath)
+	if err != nil {
+		return err
+	}
+
+	// The snapRevisions found during this step are not verified against the assertion db.
+	unverifiedSnapRevisionsMap := make(map[string]naming.SnapName)
+
+	snapIDs := make(map[naming.SnapName]string)
+	for _, modelSnap := range model.EssentialSnaps() {
+		snapIDs[modelSnap.SnapName()] = modelSnap.SnapID
+	}
+
+	for _, sn := range mounts {
+		mst.essentialSnaps[sn.SnapName()] = &essentialSnapInfo{
+			path:                filepath.Join(dirs.SnapBlobDirUnder(rootfsDir), sn.Filename()),
+			integrityDataParams: nil,
+		}
+
+		// unasserted snaps (e.g. in dangerous models) have no snap-revision
+		snapID := snapIDs[sn.SnapName()]
+		if snapID == "" || sn.SnapRevision().Local() {
+			continue
+		}
+
+		found, err := fsdb.FindMany(asserts.SnapRevisionType, map[string]string{
+			"snap-id":       snapID,
+			"snap-revision": strconv.Itoa(sn.SnapRevision().N),
+		})
+		if errors.Is(err, &asserts.NotFoundError{}) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if len(found) > 1 {
+			return fmt.Errorf("internal error: multiple snap-revision assertions found that match (snap-id=%s, snap-revision=%s)", snapID, sn.SnapRevision())
+		}
+		rev := found[0].(*asserts.SnapRevision)
+
+		unverifiedSnapRevisionsMap[rev.SnapSHA3_384()] = sn.SnapName()
+	}
+
+	// create a temporary in-memory database bootstrapped with the Canonical Root key
+	memdb, err := asserts.OpenDatabase(&asserts.DatabaseConfig{
+		Backstore: asserts.NewMemoryBackstore(),
+		Trusted:   sysdbTrusted(),
+	})
+	if err != nil {
+		return err
+	}
+
+	retrieve := func(ref *asserts.Ref) (asserts.Assertion, error) {
+		return ref.Resolve(fsdb.Find)
+	}
+	save := func(a asserts.Assertion) error {
+		// for checking
+		err := memdb.Add(a)
+		if err != nil {
+			if _, ok := err.(*asserts.RevisionError); ok {
+				return nil
+			}
+			return fmt.Errorf("cannot add assertion %v: %v", a.Ref(), err)
+		}
+
+		if rev, ok := a.(*asserts.SnapRevision); ok {
+			snapName := unverifiedSnapRevisionsMap[rev.SnapSHA3_384()]
+			if snapName != "" {
+				idp, err := integrity.NewIntegrityDataParamsFromRevision(rev)
+
+				// Currently integrity data are not enforced therefore errors returned when integrity data
+				// are not found for a snap revision are ignored.
+				if err != nil && err != integrity.ErrNoIntegrityDataFoundInRevision {
+					return err
+				}
+
+				// After validation, store the discovered revisions in the state to be
+				// retrieved later during mount generation in order to retrieve integrity
+				// data.
+				mst.essentialSnaps[snapName].integrityDataParams = idp
+			}
+		}
+
+		return nil
+	}
+
+	f := asserts.NewFetcher(memdb, retrieve, save)
+
+	// Using the fetcher, the snap revisions that were discovered in the fs-backed assertion database
+	// are read again from the disk and verified against the Canonical Root key.
+	for revHash := range unverifiedSnapRevisionsMap {
+		err := f.Fetch(&asserts.Ref{
+			Type:       asserts.SnapRevisionType,
+			PrimaryKey: []string{revHash},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type essentialSnapInfo struct {
+	path                string
+	integrityDataParams *integrity.IntegrityDataParams
+}
+
+func (ess *essentialSnapInfo) GetVerityOptions() (*dmVerityOptions, error) {
+	hashDevice, err := integrityLookupDataAndCrossCheck(ess.path, ess.integrityDataParams)
+
+	if err != nil && err == integrity.ErrIntegrityDataParamsNotFound {
+		// TODO: this should throw error if integrity data are required by
+		// policy in the future
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("cannot generate mount for snap %s: %w", ess.path, err)
+	}
+
+	// TODO: we currently rely on several parameters from the on-disk unverified superblock
+	// which gets automatically parsed by veritysetup for the mount. Instead we can use
+	// the parameters we already have in the assertion as options to the mount but this
+	// would require extra support in libmount.
+	return &dmVerityOptions{
+		HashDevice: hashDevice,
+		RootHash:   ess.integrityDataParams.Digest,
 	}, nil
 }

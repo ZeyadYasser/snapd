@@ -774,3 +774,8 @@ func IsCompleteShSymlink(compPath string) bool {
 	// check if the target paths ends with "/snapd/complete.sh"
 	return err == nil && filepath.Base(filepath.Dir(target)) == "snapd" && filepath.Base(target) == "complete.sh"
 }
+
+// SnapAssertionDirUnder returns the path to the assertions dir under rootdir.
+func SnapAssertionsDirUnder(rootdir string) string {
+	return filepath.Join(rootdir, snappyDir, "assertions")
+}

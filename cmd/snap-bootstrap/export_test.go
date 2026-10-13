@@ -49,6 +49,8 @@ var (
 	ParseImageManifest = parseImageManifest
 
 	CreateOverlayDirs = createOverlayDirs
+
+	WriteSnapMountUnitDropIn = writeSnapMountUnitDropIn
 )
 
 type OverlayFsOptions = overlayFsOptions

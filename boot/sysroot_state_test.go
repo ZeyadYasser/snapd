@@ -76,3 +76,16 @@ func (s *sysrootStateSuite) TestLoadSysrootStateMalformed(c *C) {
 	_, err := boot.LoadSysrootState()
 	c.Check(err, ErrorMatches, "unexpected end of JSON input")
 }
+
+func (s *sysrootStateSuite) TestWriteSysrootState(c *C) {
+	st := &boot.SysrootState{
+		Integrity: &boot.SysrootIntegrity{Type: "dm-verity"},
+	}
+	c.Assert(st.Write(), IsNil)
+
+	c.Check(filepath.Join(dirs.SnapBootstrapRunDir, "sysroot.json"), testutil.FileEquals, `{"integrity":{"type":"dm-verity"}}`)
+
+	loaded, err := boot.LoadSysrootState()
+	c.Assert(err, IsNil)
+	c.Check(loaded, DeepEquals, st)
+}

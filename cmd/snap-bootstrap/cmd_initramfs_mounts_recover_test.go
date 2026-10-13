@@ -529,8 +529,12 @@ func (s *initramfsMountsSuite) _testInitramfsMountsRecoverMode(c *C, base string
 	baseUnitPath := filepath.Join(unitDir, "sysroot.mount")
 
 	options := ""
+	sysrootJSON := filepath.Join(dirs.SnapBootstrapRunDir, "sysroot.json")
 	if baseIntegrityData != nil {
 		options = fmt.Sprintf("\nOptions=verity.roothash=%s,verity.hashdevice=%s", baseIntegrityData.Digest, filepath.Join(dirs.GlobalRootDir, "/run/mnt/ubuntu-seed/snaps/"+base+"_1.snap.verity"))
+		c.Check(sysrootJSON, testutil.FileEquals, `{"integrity":{"type":"dm-verity"}}`)
+	} else {
+		c.Check(sysrootJSON, testutil.FileAbsent)
 	}
 
 	c.Assert(baseUnitPath, testutil.FileEquals, `[Unit]

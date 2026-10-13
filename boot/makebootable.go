@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/snapcore/snapd/osutil/kcmdline"
 	"github.com/snapcore/snapd/secboot"
 	"github.com/snapcore/snapd/snap"
+	"github.com/snapcore/snapd/snap/integrity"
 	"github.com/snapcore/snapd/snap/snapfile"
 	"github.com/snapcore/snapd/strutil"
 )
@@ -548,6 +550,21 @@ func makeRunnableSystem(model *asserts.Model, bootWith *BootableSet, bootAssets 
 		{orig: bootWith.GadgetPath, fileName: bootWith.Gadget.Filename()}} {
 		if err := copyBootSnap(origDest.orig, origDest.fileName, snapBlobDir); err != nil {
 			return err
+		}
+
+		// Copy verity data for essential snaps into the ubuntu-data partition.
+		integrityFilePaths, err := integrity.FindIntegrityFilesForSnap(origDest.orig, nil)
+		if err != nil {
+			return fmt.Errorf("cannot find integrity files for snap %s: %v", origDest.orig, err)
+		}
+		for _, ifp := range integrityFilePaths {
+			// extract digest from integrity filename
+			digest := strings.TrimSuffix(ifp, ".dmverity")
+			digest = strings.TrimPrefix(digest, strings.TrimSuffix(origDest.orig, ".snap")+"_")
+			target := integrity.IntegrityFilePath(origDest.fileName, digest)
+			if err := copyBootSnap(ifp, target, snapBlobDir); err != nil {
+				return err
+			}
 		}
 	}
 	for _, kmod := range bootWith.KernelMods {

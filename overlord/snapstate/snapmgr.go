@@ -1493,6 +1493,7 @@ func maybeAppendIntegrityMountOptions(st *state.State, deviceCtx DeviceContext, 
 	if err != nil {
 		return err
 	}
+	mountOptions.Options = append(mountOptions.Options, "X-mount.noloop")
 	mountOptions.Options = append(mountOptions.Options, integrityMountOpts...)
 	return nil
 }

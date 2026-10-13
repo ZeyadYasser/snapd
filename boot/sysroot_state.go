@@ -45,6 +45,18 @@ type SysrootState struct {
 	Integrity *SysrootIntegrity `json:"integrity,omitempty"`
 }
 
+// Write writes the SysrootState into the snap-bootstrap /run dir.
+func (st *SysrootState) Write() error {
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dirs.SnapBootstrapRunDir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dirs.SnapBootstrapRunDir, sysrootStateFileName), b, 0644)
+}
+
 // LoadSysrootState reads SysrootState from the snap-bootstrap /run dir.
 //
 // Returns os.ErrNotExist if the sysroot state file does not exist.
